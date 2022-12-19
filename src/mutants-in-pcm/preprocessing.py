@@ -19,7 +19,7 @@ from pandas.io.parsers import TextFileReader as PandasTextFileReader
 
 
 def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: str = None):
-    """Obtain mutant data from ChEMBL using chembl-downloader.
+    """Obtain assay descriptions and bioactivities annotated for mutants from ChEMBL using chembl-downloader.
 
     :param chembl_version: version of chembl to work with
     :param chunksize: size of chunks of data to be used (default: None)
@@ -27,11 +27,42 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
     SQLite database is located or will be downloaded (default:
     pystow's default directory)
     """
-    query = """ """
-    chembl_data = chembl_downloader.query(query, version=chembl_version,
-                                          prefix=[data_folder],
-                                          chunksize=chunksize)
-    return chembl_data
+    if data_folder is not None:
+        os.environ['PYSTOW_HOME'] = data_folder
+
+    chembl_file = '../../data/chembl_data.csv'
+    if not os.path.isfile(chembl_file):
+
+        query = """
+            SELECT assays.description,assays.assay_id,assays.variant_id,assays.chembl_id,assays.assay_organism,
+                variant_sequences.mutation,
+                activities.activity_id,activities.pchembl_value,activities.standard_type,
+                molecule_dictionary.chembl_id,compound_structures.canonical_smiles,
+                component_sequences.accession,component_sequences.sequence,component_sequences.organism
+            FROM assays
+                LEFT JOIN activities USING (assay_id)
+                LEFT JOIN variant_sequences USING (variant_id)
+                INNER JOIN molecule_dictionary
+                    ON activities.molregno = molecule_dictionary.molregno
+                INNER JOIN compound_structures
+                    ON molecule_dictionary.molregno = compound_structures.molregno
+                INNER JOIN target_dictionary
+                        ON assays.tid = target_dictionary.tid
+                INNER JOIN target_components
+                    ON target_dictionary.tid = target_components.tid
+                INNER JOIN component_sequences
+                    ON target_components.component_id = component_sequences.component_id
+            """
+
+        chembl_assays = chembl_downloader.query(query, version=chembl_version,
+                                              prefix=['mutants-in-pcm', 'chembl'])#,
+                                              # chunksize=chunksize)
+        chembl_assays.to_csv(chembl_file, sep='\t', index=None)
+
+    else:
+        chembl_assays = pd.read_csv(chembl_file, sep='\t')
+
+    return chembl_assays
 
 
 def obtain_papyrus_data(papyrus_version: str, flavor: str, chunksize: int = None, data_folder: str = None) -> Union[pd.DataFrame, PandasTextFileReader]:
