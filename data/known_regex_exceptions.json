@@ -1,0 +1,37 @@
+{
+  "false_positive": {
+    "accession": {
+      "P14416": ["D2L","D2S","D2A","K293T"],
+      "P61169": ["D2L","D2S","D2A"],
+      "P35462": ["K293T"],
+      "Q9UKV0": ["H2B","H2A"],
+      "Q96DB2": ["H3K"]
+    },
+    "description": {
+      "SPA4CT": ["A4C"],
+      "A2B1G1": ["A2B"],
+      "M1H assay": ["M1H"],
+      "5-HT2": ["T2A","T2C"],
+      "[3H]P4S": ["P4S"],
+      "MM1S": ["M1S"],
+      "EG7NS": ["G7N"],
+      "GE4E": ["E4E"],
+      "H3K4me3": ["H3K"],
+      "CMT2A": ["T2A"]
+    },
+    "any": ["H5Q"]
+  },
+  "false_negative": {
+    "accession": {
+      "P13922": ["C59R","S108N","S108T"],
+      "Q72547": ["K103N"]
+    },
+    "assay_id": {
+      "312999": ["T877A"]
+    }
+  }
+
+
+
+
+}
