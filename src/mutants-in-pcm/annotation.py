@@ -207,13 +207,60 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
             false_pos = dict_known_exceptions['false_positive']
             false_neg = dict_known_exceptions['false_negative']
 
-    # # Re-define validation flags based on known exceptions and rescues
-    #
-    # # Validation step 2: Filter out mutations where wild type amino acid does not match at the right location
-    # assays_df_validation2['aa_change_val2'] = \
-    #     assays_df_validation2.apply(lambda x: [i for i, n in zip(x['aa_change_val1'], x['seq_flags']) if n == False],
-    #                                 axis=1)
-    return assays_df_validation2
+        # Re-define sequence validation flags based on known exceptions and rescues
+        def redefine_seq_flags(row):
+            flags_fixed = row['seq_flags'][:]
+
+            for i, mut in enumerate(row['aa_change_val1']):
+                # Revert False positives based on accession
+                if row['accession'] in false_pos['accession'].keys():
+                    if mut in false_pos['accession'][row['accession']]:
+                        flags_fixed[i] = False
+                # Revert False positives based on assay_id
+                if str(row['assay_id']) in false_pos['assay_id'].keys():
+                    if mut in false_pos['assay_id'][str(row['assay_id'])]:
+                        flags_fixed[i] = False
+                # Revert False positives based on assay description matches
+                description_match = [n for n, s in enumerate(false_pos['description'].keys()) if
+                                     s in row['description']]
+                if bool(description_match):
+                    if mut in list(false_pos['description'].values())[description_match[0]]:
+                        flags_fixed[i] = False
+
+                # Revert False negatives based on accession
+                if row['accession'] in false_neg['accession'].keys():
+                    if mut in false_neg['accession'][row['accession']]:
+                        flags_fixed[i] = True
+                # Revert False negatives based on assay_id
+                if str(row['assay_id']) in false_neg['assay_id'].keys():
+                    if mut in false_neg['assay_id'][str(row['assay_id'])]:
+                        flags_fixed[i] = True
+                # Revert False negatives based on assay description matches
+                description_match = [n for n, s in enumerate(false_neg['description'].keys()) if
+                                     s in row['description']]
+                if bool(description_match):
+                    if mut in list(false_neg['description'].values())[description_match[0]]:
+                        flags_fixed[i] = True
+
+            return flags_fixed
+
+        assays_df_validation2['seq_flags_fixed'] = assays_df_validation2.apply(redefine_seq_flags, axis=1)
+
+    else:
+        assays_df_validation2['seq_flags_fixed'] = assays_df_validation2['seq_flags']
+
+    # Validation step 2: Filter out mutations where wild type amino acid does not match at the right location
+    assays_df_validation2['aa_change_val2'] = \
+        assays_df_validation2.apply(lambda x: [i for i, n in zip(x['aa_change_val1'], x['seq_flags_fixed'])
+                                               if n == True], axis=1)
+
+    # Remove columns created for validation purposes and make validated changes a new variable called 'mutants'
+    assays_df_validated = assays_df_validation2.copy(deep=True)
+    assays_df_validated.drop(['exception_flags', 'exception_reasons', 'seq_flags', 'seq_flags_fixed', 'aa_change_val1'],
+                              axis=1, inplace=True)
+    assays_df_validated.rename(columns={"aa_change_val2":"mutants"}, inplace=True)
+
+    return assays_df_validated
 
 
 
@@ -229,7 +276,22 @@ def create_target_id(assays_df_validated: pd.DataFrame, clean_df: bool = True):
     :return: the input DataFrame with a new column 'target_id' consisting of the target accession code followed by as
             many mutations separated by underscores as annotated and validated amino acid changes.
     """
+    # Remove duplicated extracted mutations (sometimes multiple times in the assay description) and order by residue
+    assays_df_validated['mutants'] = assays_df_validated['mutants'].apply(lambda x: list(set(x)))
+
+    def num_sort(mut):
+        return list(map(int, re.findall(r'\d+', str(mut))))[0]
+
+    assays_df_validated['mutants'] = assays_df_validated['mutants'].apply(lambda x: sorted(x, key=num_sort))
+
+    # Make target_id identifier
+    assays_df_validated['target_id'] = assays_df_validated.apply(
+        lambda x: f'{x["accession"]}_{"_".join(x["mutants"])}' if len(x["mutants"]) > 0 else f'{x["accession"]}_WT',
+        axis=1)
+
     # Write df to file to later join to bioactivity data for modelling
+    return assays_df_validated
+
 
 if __name__ == '__main__':
     chembl_data = obtain_chembl_data(chembl_version='31', chunksize= 100_000)
