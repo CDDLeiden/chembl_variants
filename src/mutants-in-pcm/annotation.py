@@ -14,11 +14,11 @@ from preprocessing import obtain_chembl_data
 def filter_assay_data(chembl_df: pd.DataFrame):
     """
     Filter from a dataframe with ChEMBL data the necessary columns for amino acid change annotation.
-    :param chembl_df: DataFrame withe ChEMBL data of interest. It must contain columns of interest:
-                    ['assay_id', 'description', 'accession', 'sequence']
+    :param chembl_df: DataFrame with ChEMBL data of interest. It must contain columns of interest:
+                    ['assay_id', 'description', 'accession', 'sequence', 'mutation']
     :return: DataFrame containing only columns of interest with duplicates dropped.
     """
-    assay_df = chembl_df[['assay_id', 'description', 'accession', 'sequence']]
+    assay_df = chembl_df[['assay_id', 'description', 'accession', 'sequence', 'mutation']]
     # Drop duplicates inherited from assay-activity link
     assay_df = assay_df.drop_duplicates(subset=['assay_id', 'accession'])
 
@@ -72,9 +72,8 @@ def extract_aa_change(assays_df: pd.DataFrame):
     # Convert aa_change column back to list
     assays_df_extracted['aa_change'] = assays_df_extracted['aa_change'].map(lambda x: x.split(sep=','))
 
-    # Keep only assay descriptions where a regex match was found for aa_change
+    # Remove wrongly assigned empty strings in amino acid lists
     assays_df_extracted['aa_change'] = assays_df_extracted['aa_change'].apply(lambda x: [i for i in x if i != ""])
-    assays_df_extracted = assays_df_extracted[assays_df_extracted['aa_change'].map(lambda x: len(x) > 0)]
 
     return assays_df_extracted
     
@@ -151,6 +150,7 @@ def define_aa_change_exceptions(assays_df_extracted: pd.DataFrame, chembl_versio
 def validate_aa_change(assays_df_extracted: pd.DataFrame,
                        known_exceptions: str = '../../data/known_regex_exceptions.json',
                        automatic_exceptions: bool = True,
+                       clean_df: bool = True,
                        **kwargs):
     """
     Validate amino acid (aa) changes extracted with regular expression by comparing the wild type aa to its position in
@@ -161,8 +161,9 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
                             a false positive. Dictionary keys are targets annotated as 'accession' (Uniprot accession).
     :param automatic_exceptions: Call function `define_aa_change_exceptions` to automatically flag potential False
                                 annotations.
-    :return: the input DataFrame with a new column 'aa_change_validation' with a list of Booleans that defined whether
-            the extracted aa change is validated by its position in the wild type sequence
+    :param clean_df: Whether to strip the output DataFrame of annotation and validation columns, i.e.
+                    ['exception_flags', 'exception_reasons', 'seq_flags', 'seq_flags_fixed', 'aa_change_val1']
+    :return: the input DataFrame with a new column 'mutants' with a list of validated extracted aa changes
     """
     # Define exceptions based on additional assay information from ChEMBL query
     if automatic_exceptions:
@@ -184,21 +185,22 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
         assays_df_validation1.apply(lambda x: [i for i,n in zip(x['aa_change'], x['exception_flags']) if n == False], axis=1)
 
     # Define validation flags based on position of wild type amino acid in the sequence
-    def sequence_validation(row):
-        flags = [False for i in row['aa_change_val1']]
+    def sequence_validation(row,aa_change_col,sequence_col):
+        flags = [False for i in row[aa_change_col]]
 
-        for i, aa_change in enumerate(row['aa_change_val1']):
+        for i, aa_change in enumerate(row[aa_change_col]):
             aa_wt = re.search('[A-Z]', aa_change).group(0)
             res = int(re.search('\d+', aa_change).group(0))
 
-            if res < len(str(row['sequence'])):
-                if str(row['sequence'])[res - 1] == aa_wt:  # residue number 1-based; while python index 0-based
+            if res < len(str(row[sequence_col])):
+                if str(row[sequence_col])[res - 1] == aa_wt:  # residue number 1-based; while python index 0-based
                     flags[i] = True
 
         return flags
 
     assays_df_validation2 = assays_df_validation1.copy(deep=True)
-    assays_df_validation2['seq_flags'] = assays_df_validation2.apply(sequence_validation, axis=1)
+    assays_df_validation2['seq_flags'] = assays_df_validation2.apply(sequence_validation,
+                                                                     args=('aa_change_val1','sequence'), axis=1)
 
     # Define exception (rescue) flags from file of known exceptions
     if known_exceptions is not None:
@@ -256,25 +258,25 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
 
     # Remove columns created for validation purposes and make validated changes a new variable called 'mutants'
     assays_df_validated = assays_df_validation2.copy(deep=True)
-    assays_df_validated.drop(['exception_flags', 'exception_reasons', 'seq_flags', 'seq_flags_fixed', 'aa_change_val1'],
-                              axis=1, inplace=True)
+    if clean_df:
+        assays_df_validated.drop(['exception_flags', 'exception_reasons', 'seq_flags', 'seq_flags_fixed', 'aa_change_val1'],
+                                  axis=1, inplace=True)
     assays_df_validated.rename(columns={"aa_change_val2":"mutants"}, inplace=True)
 
     return assays_df_validated
 
 
 
-def create_target_id(assays_df_validated: pd.DataFrame, clean_df: bool = True):
+def create_papyrus_columns(assays_df_validated: pd.DataFrame):
     """
-    Create column 'target_id' matching Papyrus dataset style based on annotated and validated 'aa_change' from assay
-    descriptions in ChEMBL.
+    Create column 'target_id' and 'Protein_Type' matching Papyrus dataset style based on annotated and validated
+    'aa_change' from assay descriptions in ChEMBL.
     :param assays_df_validated: DataFrame containing amino acid change annotations in a column named 'aa_change' and a
                                 column 'aa_change_validation' with a list of Booleans that defined whether the extracted
                                 aa change is validated by its position in the wild type sequence
-    :param clean_df: Whether to strip the output DataFrame of annotation and validation columns, i.e.
-                    ['aa_change', 'aa_change_validation', 'exception_flag']
-    :return: the input DataFrame with a new column 'target_id' consisting of the target accession code followed by as
-            many mutations separated by underscores as annotated and validated amino acid changes.
+    :return: the input DataFrame with two new columns: 'target_id' consisting of the target accession code followed by
+            '_WT or 'as many mutations separated by underscores as annotated and validated amino acid changes; and
+            'Protein_Type', where WT or mutants are defined.
     """
     # Remove duplicated extracted mutations (sometimes multiple times in the assay description) and order by residue
     assays_df_validated['mutants'] = assays_df_validated['mutants'].apply(lambda x: list(set(x)))
@@ -289,13 +291,93 @@ def create_target_id(assays_df_validated: pd.DataFrame, clean_df: bool = True):
         lambda x: f'{x["accession"]}_{"_".join(x["mutants"])}' if len(x["mutants"]) > 0 else f'{x["accession"]}_WT',
         axis=1)
 
-    # Write df to file to later join to bioactivity data for modelling
+    # Make Protein_Type column
+    assays_df_validated['Protein_Type'] = assays_df_validated.apply(
+        lambda x: ";".join(x["mutants"]) if len(x["mutants"]) > 0 else 'WT', axis=1)
+
     return assays_df_validated
 
+def mutate_sequence(df: pd.DataFrame, sequence_col: str, target_id_col: str, revert: bool = False):
+    """
+    Replaces the column with the target sequence with the mutant sequence based on mutations defined in the target_id
+    :param df: DataFrame containing a column with sequences and another with target IDs annotated with mutations
+    :param sequence_col: name of the column containing sequences
+    :param target_id_col: name of the column containing the annotated target IDs
+    :param revert: if True, mutant sequence is reverted to WT
+    :return: the input dataframe with a modified sequence column with mutations introduced or reverted
+    """
+    def replace_aa(row):
+        sequence = row[sequence_col]
+        for mut in row[target_id_col].split('_')[1:]:
+            if mut != 'WT':
+                aa_wt = mut[0]
+                aa_mut = mut[-1]
+                res = int(re.search('\d+', mut).group(0))
+                index = res -1 # residue number 1-based; while python index 0-based
+                if not revert:
+                    sequence = sequence[:index] + aa_mut + sequence[index + 1:]
+                else:
+                    sequence = sequence[:index] + aa_wt + sequence[index + 1:]
 
-if __name__ == '__main__':
-    chembl_data = obtain_chembl_data(chembl_version='31', chunksize= 100_000)
+        return sequence
+
+    df[sequence_col] = df.apply(replace_aa, axis=1)
+
+    return df
+
+def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_validated: pd.DataFrame):
+    """
+    Join mutation annotations to dataframe with ChEMBL bioactivity for modelling. Aggregate activity values for the same
+    chembl_id-target_id pair by calculating the mean pchembl_value.
+    :param chembl_df: DataFrame with ChEMBL bioactivity data of interest. It must contain columns of interest:
+                    ['assay_id', 'accession', 'pchembl_value', 'chembl_id', 'canonical_smiles']
+    :param assays_df_validated:DataFrame with annotated and validated mutations from assay descriptions. Must contain:
+                                ['assay_id', 'accession', 'target_id', 'sequence']
+    :return: DataFrame with one row per chembl_id-target_id pair with an aggregated pchembl_value_Mean
+    """
+    # Mutate sequences based on extracted mutations
+    assays_df_validated = mutate_sequence(assays_df_validated, 'sequence', 'target_id')
+
+    # Keep columns of interest before joining dataframes
+    chembl_df = chembl_df[['assay_id', 'accession', 'pchembl_value', 'chembl_id', 'canonical_smiles']]
+    assays_df_validated = assays_df_validated[['assay_id', 'accession', 'target_id', 'sequence']]
+
+    # Map mutations to bioactivity entries based on assay_id and accession
+    chembl_mutations_df = pd.merge(chembl_df, assays_df_validated, how='left', on=['assay_id', 'accession'])
+
+    # Keep only assays with pchembl value defined
+    chembl_bioactivity_df = chembl_mutations_df[chembl_mutations_df['pchembl_value'].notna()]
+
+    # Aggregate bioactivity per compound-target(mutant) pair. Calculate mean pchembl_value if needed
+    def agg_functions(x):
+        d = {}
+        d['assay_id'] = list(x['assay_id'])
+        d['accession'] = x['accession'].iloc[0]
+        d['pchembl_value'] = list(x['pchembl_value'])
+        d['pchembl_value_Mean'] = x['pchembl_value'].mean()
+        d['canonical_smiles'] = x['canonical_smiles'].iloc[0],
+        d['sequence'] = x['sequence'].iloc[0]
+        return pd.Series(d, index=['assay_id', 'accession', 'pchembl_value', 'pchembl_value_Mean', 'canonical_smiles',
+                                   'sequence'])
+
+    chembl_bioactivity_agg_df = chembl_mutations_df.groupby(['chembl_id', 'target_id'], as_index=False).apply(
+        agg_functions)
+
+    return chembl_bioactivity_agg_df
+
+
+def annotation(chembl_version: str):
+    """
+    Obtain ChEMBL bioactivity data and annotate for validated mutants. If multiple assays are available per mutant-compound pair,
+    calculate mean pchembl value.
+    :param chembl_version: Version of ChEMBL to obtain data from
+    :return: pd.DataFrame with one entry per target_id (mutant) - chembl_id (compound) with mean pchembl value
+    """
+    chembl_data = obtain_chembl_data(chembl_version='31')
     chembl_assays = filter_assay_data(chembl_data)
     chembl_assays_extracted = extract_aa_change(chembl_assays)
-    chembl_assays_validated = validate_aa_change(chembl_assays_extracted, 'path_to_dict')
-    chembl_assays_annotated = create_target_id(chembl_assays_validated)
+    chembl_assays_validated = validate_aa_change(chembl_assays_extracted, chembl_version='31')
+    chembl_assays_annotated = create_papyrus_columns(chembl_assays_validated)
+    chembl_bioactivity_dataset = map_activity_mutations(chembl_data, chembl_assays_annotated)
+
+    return chembl_bioactivity_dataset
