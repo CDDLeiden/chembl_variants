@@ -92,7 +92,8 @@ def define_aa_change_exceptions(assays_df_extracted: pd.DataFrame, chembl_versio
     query = """
             SELECT assays.assay_id,assays.assay_cell_type,
                 component_synonyms.component_synonym,
-                cell_dictionary.cell_name
+                cell_dictionary.cell_name,
+                target_dictionary.pref_name
             FROM assays
                 INNER JOIN target_dictionary
                     ON assays.tid = target_dictionary.tid
@@ -110,7 +111,7 @@ def define_aa_change_exceptions(assays_df_extracted: pd.DataFrame, chembl_versio
                                                        prefix=['mutants-in-pcm', 'chembl'])
 
     # Keep one entry per assay id by aggregating and minimizing the information
-    agg_functions = {'assay_cell_type': list, 'component_synonym': list, 'cell_name': list}
+    agg_functions = {'assay_cell_type': list, 'component_synonym': list, 'cell_name': list, 'pref_name': list}
     chembl_assay_information_grouped = chembl_assay_information.groupby(chembl_assay_information['assay_id'],
                                                                         as_index=False).aggregate(agg_functions)
     chembl_assay_information_grouped['assay_cell_type'] = chembl_assay_information_grouped['assay_cell_type'].apply(
@@ -118,6 +119,8 @@ def define_aa_change_exceptions(assays_df_extracted: pd.DataFrame, chembl_versio
     chembl_assay_information_grouped['component_synonym'] = chembl_assay_information_grouped['component_synonym'].apply(
         lambda x: list(set([i for i in x if i is not None])))
     chembl_assay_information_grouped['cell_name'] = chembl_assay_information_grouped['cell_name'].apply(
+        lambda x: list(set([i for i in x if i is not None])))
+    chembl_assay_information_grouped['pref_name'] = chembl_assay_information_grouped['pref_name'].apply(
         lambda x: list(set([i for i in x if i is not None])))
 
     # Flag assays in input set with additional assay information
@@ -127,10 +130,9 @@ def define_aa_change_exceptions(assays_df_extracted: pd.DataFrame, chembl_versio
     def flag_regex_exceptions(row):
         flags = [False for i in row['aa_change']]
         reasons = [None for i in row['aa_change']]
-        cols = ['assay_cell_type', 'component_synonym', 'cell_name']
 
         for i, aa_change in enumerate(row['aa_change']):
-            for col in ['assay_cell_type', 'component_synonym', 'cell_name']:
+            for col in ['assay_cell_type', 'component_synonym', 'cell_name', 'pref_name']:
                 match = [s for s in row[col] if aa_change.upper() in s.upper()]
                 if len(match) > 0:
                     flags[i] = True
@@ -142,7 +144,7 @@ def define_aa_change_exceptions(assays_df_extracted: pd.DataFrame, chembl_versio
                                                                                                   axis=1,
                                                                                                   result_type='expand')
     # Drop information columns
-    assays_df_exceptions.drop(['assay_cell_type', 'component_synonym', 'cell_name'], axis=1, inplace=True)
+    assays_df_exceptions.drop(['assay_cell_type', 'component_synonym', 'cell_name', 'pref_name'], axis=1, inplace=True)
 
     return assays_df_exceptions
 
