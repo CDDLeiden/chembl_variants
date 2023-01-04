@@ -1,0 +1,90 @@
+{
+  "false_positive": {
+    "accession": {
+      "P14416": ["D2L","D2S","D2A","D2R"],
+      "P61169": ["D2L","D2S","D2A","D2R"],
+      "P08908": ["D2L"],
+      "Q9UKV0": ["H2B","H2A"],
+      "Q96DB2": ["H3K"],
+      "P41968": ["C5R"],
+      "A8NS89": ["T6P"],
+      "Q96GG9": ["L4A","L4B"],
+      "Q04771": ["K27M"],
+      "P28647": ["A3A"]
+    },
+    "assay_id": {
+
+    },
+    "description": {
+      "SPA4CT": ["A4C"],
+      "A2B1G1": ["A2B"],
+      "M1H assay": ["M1H"],
+      "5-HT2": ["T2A","T2C"],
+      "[3H]P4S": ["P4S"],
+      "MM1S": ["M1S"],
+      "EG7NS": ["G7N"],
+      "GE4E": ["E4E"],
+      "H3K4me3": ["H3K"],
+      "CMT2A": ["T2A"],
+      "CYP1A2": ["P1A","1A2"],
+      "CYP2C9": ["P2C","2C9"],
+      "CYP2C19": ["P2C","2C19"],
+      "CYP2C8": ["P2C","2C8"],
+      "CYP2B6": ["P2B","2B6"],
+      "CYP2D6": ["P2D","2D6"],
+      "CYP2E1": ["P2E","2E1"],
+      "CYP3A4": ["P3A","3A4"],
+      "CYP3A5": ["P3A","3A5"],
+      "PDE11A4": ["E11A"],
+      "PDE10A1": ["E10A"],
+      "PDE5A1": ["E5A"],
+      "PDE6C": ["E6C"],
+      "PDE8A": ["E8A"],
+      "PDE7A":  ["E7A"],
+      "PDE4A10": ["E4A"],
+      "human D2R": ["D2R"],
+      "C3A cells": ["C3A"],
+      "M1AAP": ["M1A"],
+      "NR2B": ["R2B"],
+      "GluR7A": ["R7A"],
+      "gammaH2AX": ["H2A"],
+      "GluA2A3": ["2A3"],
+      "JHDM1F": ["M1F"],
+      "Neu5Acalpha": ["Neu5Acalpha"],
+      "HEK293T": ["K293T"],
+      "H2O2-catalized": ["H2O"],
+      "P70S6K": ["S6K"],
+      "SIAT4A": ["T4A"],
+      "AM1A": ["M1A"],
+      "S6K phosphorylation": ["S6K"],
+      "H2A-K119Ub": ["H2A"],
+      "M1AAP": ["M1A"],
+      "PI3K": ["I3K"],
+      "SF-2-WTQ7K-Pr": ["Q7K"],
+      "K2P3.1": ["K2P"],
+      "K2P9.1": ["K2P"],
+      "Pam2Csk": ["Pam2Csk"],
+      "Takeda global kinase panel": ["M1A","M1B","D4G","D12P","K8C","M1L","K4C","K6C","K7L","M1L","A2L","G2L","R6B","A2B","A2D","A2G"],
+      "E2F1": ["E2F"],
+      "PPM1D": ["M1D"]
+    }
+  },
+  "false_negative": {
+    "accession": {
+      "P13922": ["C59R","S108N","S108T"],
+      "Q72547": ["K103N"],
+      "P06239": ["P233M"],
+      "Q15303": ["T766M"]
+    },
+    "assay_id": {
+      "312999": ["T877A"]
+    },
+    "description": {
+
+    }
+  }
+
+
+
+
+}
