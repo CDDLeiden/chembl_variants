@@ -77,6 +77,7 @@ def obtain_papyrus_data(papyrus_version: str, flavor: str, chunksize: int = None
     # 3) Filter mutant data
     only_pp = flavor.endswith('pp')
     stereo = flavor.startswith('stereo')
+
     papyrus_data = papyrus_scripts.read_papyrus(is3d=stereo, version=papyrus_version, plusplus=only_pp,
                                                 chunksize=chunksize, source_path=data_folder)
 
