@@ -3,6 +3,7 @@
 
 """Mutant annotation."""
 import json
+import os
 
 import pandas as pd
 import numpy as np
@@ -341,7 +342,7 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_validated: pd.Data
     assays_df_validated = mutate_sequence(assays_df_validated, 'sequence', 'target_id')
 
     # Keep columns of interest before joining dataframes
-    chembl_df = chembl_df[['assay_id', 'accession', 'pchembl_value', 'chembl_id', 'canonical_smiles']]
+    chembl_df = chembl_df[['assay_id', 'accession', 'pchembl_value', 'chembl_id', 'canonical_smiles', 'mutation']]
     assays_df_validated = assays_df_validated[['assay_id', 'accession', 'target_id', 'sequence']]
 
     # Map mutations to bioactivity entries based on assay_id and accession
@@ -359,8 +360,9 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_validated: pd.Data
         d['pchembl_value_Mean'] = x['pchembl_value'].mean()
         d['canonical_smiles'] = x['canonical_smiles'].iloc[0],
         d['sequence'] = x['sequence'].iloc[0]
+        d['mutation'] = x['mutation'].iloc[0]
         return pd.Series(d, index=['assay_id', 'accession', 'pchembl_value', 'pchembl_value_Mean', 'canonical_smiles',
-                                   'sequence'])
+                                   'sequence','mutation'])
 
     chembl_bioactivity_agg_df = chembl_mutations_df.groupby(['chembl_id', 'target_id'], as_index=False).apply(
         agg_functions)
@@ -368,18 +370,26 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_validated: pd.Data
     return chembl_bioactivity_agg_df
 
 
-def annotation(chembl_version: str):
+def chembl_annotation(chembl_version: str):
     """
     Obtain ChEMBL bioactivity data and annotate for validated mutants. If multiple assays are available per mutant-compound pair,
     calculate mean pchembl value.
     :param chembl_version: Version of ChEMBL to obtain data from
     :return: pd.DataFrame with one entry per target_id (mutant) - chembl_id (compound) with mean pchembl value
     """
-    chembl_data = obtain_chembl_data(chembl_version='31')
-    chembl_assays = filter_assay_data(chembl_data)
-    chembl_assays_extracted = extract_aa_change(chembl_assays)
-    chembl_assays_validated = validate_aa_change(chembl_assays_extracted, chembl_version='31')
-    chembl_assays_annotated = create_papyrus_columns(chembl_assays_validated)
-    chembl_bioactivity_dataset = map_activity_mutations(chembl_data, chembl_assays_annotated)
+    chembl_annotation_file = '../../data/chembl_annotated_data.csv'
+
+    if not os.path.isfile(chembl_annotation_file):
+        chembl_data = obtain_chembl_data(chembl_version='31')
+        chembl_assays = filter_assay_data(chembl_data)
+        chembl_assays_extracted = extract_aa_change(chembl_assays)
+        chembl_assays_validated = validate_aa_change(chembl_assays_extracted, chembl_version='31')
+        chembl_assays_annotated = create_papyrus_columns(chembl_assays_validated)
+        chembl_bioactivity_dataset = map_activity_mutations(chembl_data, chembl_assays_annotated)
+
+        chembl_bioactivity_dataset.to_csv(chembl_annotation_file, sep='\t', index=False)
+
+    else:
+        chembl_bioactivity_dataset = pd.read_csv(chembl_annotation_file, sep='\t')
 
     return chembl_bioactivity_dataset
