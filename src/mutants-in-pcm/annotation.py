@@ -367,6 +367,8 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_validated: pd.Data
     chembl_bioactivity_agg_df = chembl_mutations_df.groupby(['chembl_id', 'target_id'], as_index=False).apply(
         agg_functions)
 
+    chembl_bioactivity_agg_df['canonical_smiles'] = chembl_bioactivity_agg_df['canonical_smiles'].apply(lambda x: x[0])
+
     return chembl_bioactivity_agg_df
 
 
