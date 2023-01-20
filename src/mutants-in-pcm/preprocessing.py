@@ -33,7 +33,7 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
         query = """
             SELECT assays.description,assays.assay_id,assays.variant_id,assays.chembl_id,assays.assay_organism,
                 variant_sequences.mutation,
-                activities.activity_id,activities.pchembl_value,activities.standard_type,
+                activities.activity_id,activities.pchembl_value,activities.standard_type,activities.activity_comment,
                 molecule_dictionary.chembl_id,compound_structures.canonical_smiles,
                 component_sequences.accession,component_sequences.sequence,component_sequences.organism
             FROM assays
@@ -49,6 +49,8 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
                     ON target_dictionary.tid = target_components.tid
                 INNER JOIN component_sequences
                     ON target_components.component_id = component_sequences.component_id
+            WHERE
+                activities.standard_relation = '='
             """
 
         chembl_assays = chembl_downloader.query(query, version=chembl_version,
