@@ -3,7 +3,9 @@
 
 """Mutant annotation."""
 import json
+import math
 import os
+from statistics import mean
 
 import pandas as pd
 import numpy as np
@@ -328,12 +330,60 @@ def mutate_sequence(df: pd.DataFrame, sequence_col: str, target_id_col: str, rev
 
     return df
 
+def keep_chembl_defined_activity(chembl_df: pd.DataFrame):
+    """
+
+    :param chembl_df: DataFrame with ChEMBL bioactivity data of interest. It must contain columns of interest:
+                    ['assay_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id', 'canonical_smiles']
+    :return:
+    """
+    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: str(x).lower())
+    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: math.nan if x == 'nan' else x)
+    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: 'active' if x in ['highly active', 'slightly active', 'weakly active', 'partially active'] else x)
+    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: 'inactive' if x in ['not active'] else x)
+
+    # Keep entries that are good for regression or classification tasks
+    chembl_df_defined_activity = chembl_df[(chembl_df['pchembl_value'].notna()) | (chembl_df['activity_comment'].isin(['active','inactive']))]
+
+    return chembl_df_defined_activity
+
+def keep_highest_quality_activity(data: pd.DataFrame, target_col: str, comp_col: str, cont_col: str, bin_col: str):
+    """
+    If a target - compound pair has both continue and binary activity data defined, keep only continue data (pchembl_value)
+    :param data: DataFrame with bioactivity data
+    :param target_col: Name of the column with the target identifier (e.g. 'accession', or 'target_id')
+    :param comp_col: Name of the column with the compound identifier (e.g. 'chembl_id', or 'CID')
+    :param cont_col: Name of the column with continous activity data (e.g. 'pchembl_value')
+    :param bin_col: Name of the column with binary activity data (e.g. 'activity_comment')
+    :return:
+    """
+    # Remove binary activity label if continuous label is defined in the same activity entry
+    data[bin_col] = data.apply(lambda x: x[bin_col] if math.isnan(x[cont_col]) else math.nan, axis=1)
+
+    # If continuous activity is available for a target-compound pair, remove all binary activity labels
+    data_grouped = data.groupby([target_col,comp_col]).agg(lambda x: list(x))
+    data_grouped[bin_col] = data_grouped.apply(lambda x: [math.nan for j in x[bin_col]] if (
+                (any([math.isnan(i) for i in x[cont_col]])) and not (
+            all([math.isnan(i) for i in x[cont_col]]))) else x[bin_col], axis=1)
+
+    # Calculate mean or consensus binary activity
+    data_grouped[f'{cont_col}_Mean'] = data_grouped.apply(
+        lambda x: mean([i for i in x[cont_col] if not math.isnan(i)]) if not (
+            all([math.isnan(i) for i in x[cont_col]])) else math.nan, axis=1)
+    data_grouped['Activity_class'] = data_grouped.apply(
+        lambda x: max(set(x[bin_col]), key=x[bin_col].count), axis=1)
+
+    data_high_quality = data_grouped.reset_index()
+
+    return data_high_quality
+
+
 def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_validated: pd.DataFrame):
     """
     Join mutation annotations to dataframe with ChEMBL bioactivity for modelling. Aggregate activity values for the same
     chembl_id-target_id pair by calculating the mean pchembl_value.
     :param chembl_df: DataFrame with ChEMBL bioactivity data of interest. It must contain columns of interest:
-                    ['assay_id', 'accession', 'pchembl_value', 'chembl_id', 'canonical_smiles']
+                    ['assay_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id', 'canonical_smiles']
     :param assays_df_validated:DataFrame with annotated and validated mutations from assay descriptions. Must contain:
                                 ['assay_id', 'accession', 'target_id', 'sequence']
     :return: DataFrame with one row per chembl_id-target_id pair with an aggregated pchembl_value_Mean
@@ -342,34 +392,23 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_validated: pd.Data
     assays_df_validated = mutate_sequence(assays_df_validated, 'sequence', 'target_id')
 
     # Keep columns of interest before joining dataframes
-    chembl_df = chembl_df[['assay_id', 'accession', 'pchembl_value', 'chembl_id', 'canonical_smiles', 'mutation']]
+    chembl_df = chembl_df[['assay_id', 'activity_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id', 'canonical_smiles', 'mutation']]
     assays_df_validated = assays_df_validated[['assay_id', 'accession', 'target_id', 'sequence']]
 
+    # Keep activity pair if pchembl value is defined or if an activity label is defined
+    chembl_df_activity = keep_chembl_defined_activity(chembl_df)
+
     # Map mutations to bioactivity entries based on assay_id and accession
-    chembl_mutations_df = pd.merge(chembl_df, assays_df_validated, how='left', on=['assay_id', 'accession'])
+    chembl_mutations_df = pd.merge(chembl_df_activity, assays_df_validated, how='left', on=['assay_id', 'accession'])
 
-    # Keep only assays with pchembl value defined
-    chembl_bioactivity_df = chembl_mutations_df[chembl_mutations_df['pchembl_value'].notna()]
+    # Keep only assays with highest activity data quality
+    chembl_bioactivity_df = keep_highest_quality_activity(chembl_mutations_df, 'target_id','chembl_id', 'pchembl_value', 'activity_comment')
 
-    # Aggregate bioactivity per compound-target(mutant) pair. Calculate mean pchembl_value if needed
-    def agg_functions(x):
-        d = {}
-        d['assay_id'] = list(x['assay_id'])
-        d['accession'] = x['accession'].iloc[0]
-        d['pchembl_value'] = list(x['pchembl_value'])
-        d['pchembl_value_Mean'] = x['pchembl_value'].mean()
-        d['canonical_smiles'] = x['canonical_smiles'].iloc[0],
-        d['sequence'] = x['sequence'].iloc[0]
-        d['mutation'] = x['mutation'].iloc[0]
-        return pd.Series(d, index=['assay_id', 'accession', 'pchembl_value', 'pchembl_value_Mean', 'canonical_smiles',
-                                   'sequence','mutation'])
+    # Keep only first item in grouped columns that have the same value
+    for col in ['accession','canonical_smiles','sequence','mutation']:
+        chembl_bioactivity_df[col] = chembl_bioactivity_df[col].apply(lambda x: x[0])
 
-    chembl_bioactivity_agg_df = chembl_mutations_df.groupby(['chembl_id', 'target_id'], as_index=False).apply(
-        agg_functions)
-
-    chembl_bioactivity_agg_df['canonical_smiles'] = chembl_bioactivity_agg_df['canonical_smiles'].apply(lambda x: x[0])
-
-    return chembl_bioactivity_agg_df
+    return chembl_bioactivity_df
 
 
 def chembl_annotation(chembl_version: str):
@@ -382,10 +421,10 @@ def chembl_annotation(chembl_version: str):
     chembl_annotation_file = '../../data/chembl_annotated_data.csv'
 
     if not os.path.isfile(chembl_annotation_file):
-        chembl_data = obtain_chembl_data(chembl_version='31')
+        chembl_data = obtain_chembl_data(chembl_version=chembl_version)
         chembl_assays = filter_assay_data(chembl_data)
         chembl_assays_extracted = extract_aa_change(chembl_assays)
-        chembl_assays_validated = validate_aa_change(chembl_assays_extracted, chembl_version='31')
+        chembl_assays_validated = validate_aa_change(chembl_assays_extracted, chembl_version=chembl_version)
         chembl_assays_annotated = create_papyrus_columns(chembl_assays_validated)
         chembl_bioactivity_dataset = map_activity_mutations(chembl_data, chembl_assays_annotated)
 
@@ -395,3 +434,7 @@ def chembl_annotation(chembl_version: str):
         chembl_bioactivity_dataset = pd.read_csv(chembl_annotation_file, sep='\t')
 
     return chembl_bioactivity_dataset
+
+if __name__ == "__main__":
+    pd.options.display.width = 0
+    chembl_annotation('31')
