@@ -121,25 +121,38 @@ def plot_variant_activity_distribution(data: pd.DataFrame, accession: str, wt:bo
 
     data_accession = get_variant_common_subset(data, accession, common, threshold, variant_coverage)
 
-    if not hist:
-        g = sns.displot(data_accession, x='pchembl_value_Mean', hue='target_id', kind='kde', fill=True)
-    else:
-        g = sns.displot(data_accession, x='pchembl_value_Mean', hue='target_id', kde=True)
+    # Check if data has enough variance to be plotted in a distribution plot
+    if not data_accession.groupby(['target_id'])['pchembl_value_Mean'].var().isnull().all():
+        if not hist:
+            g = sns.displot(data_accession, x='pchembl_value_Mean', hue='target_id', kind='kde', fill=True)
+        else:
+            g = sns.displot(data_accession, x='pchembl_value_Mean', hue='target_id', kde=True)
 
-    plt.xlabel('pChEMBL value (Mean)')
-    try:
-        g._legend.set_title(f'{accession} variants\nCommon subset \n({variant_coverage*100} % coverage)')
+        plt.xlabel('pChEMBL value (Mean)')
+        if variant_coverage is not None:
+            g._legend.set_title(f'{accession} variants\nCommon subset \n({variant_coverage*100} % coverage)')
+        else:
+            g._legend.set_title(f'{accession} variants\nCommon subset \n(Not defined coverage)')
 
         plt.savefig(os.path.join(output_dir, f'variant_activity_distribution_{accession}.png'), dpi=300)
-    except AttributeError:
-        print(f'Skipping {accession}... Not enough data to plot')
+
+    else:
+        if not os.path.exists(os.path.join(output_dir, 'skipped_accession.txt')):
+            with open(os.path.join(output_dir, 'skipped_accession.txt'),'w') as file:
+                file.write(f'Skipping accession {accession}\n')
+        else:
+            with open(os.path.join(output_dir, 'skipped_accession.txt'),'r+') as file:
+                for line in file:
+                    if accession in line:
+                        break
+                else:
+                    file.write(f'Skipping accession {accession}\n')
 
 
 if __name__ == '__main__':
     pd.options.display.width = 0
     data_with_mutants = combine_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
     stats = compute_stats_per_accession(data_with_mutants)
-    print(stats)
 
     # # Check if Adenosine A2A is in the set
     # stats_a2a = stats[stats['accession'] == 'P29274']
@@ -147,6 +160,10 @@ if __name__ == '__main__':
 
     output_dir = 'C:\\Users\gorostiolam\Documents\Gorostiola Gonzalez, Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\0_mutant_statistics'
     for accession in stats['accession'].tolist():
-        plot_variant_activity_distribution(data_with_mutants, accession, wt=True, common=True, threshold=2, variant_coverage=0.2, hist=False, output_dir=output_dir)
-
+        plot_variant_activity_distribution(data_with_mutants, accession, wt=True, common=True, threshold=2,
+                                           variant_coverage=0.2, hist=False, output_dir=os.path.join(output_dir,'common_subset_20'))
+        plot_variant_activity_distribution(data_with_mutants, accession, wt=True, common=True, threshold=2,
+                                           variant_coverage=None, hist=False, output_dir=os.path.join(output_dir,'common_subset'))
+        plot_variant_activity_distribution(data_with_mutants, accession, wt=True, common=False, threshold=None,
+                                           variant_coverage=None, hist=False, output_dir=os.path.join(output_dir,'all'))
 
