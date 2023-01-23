@@ -8,6 +8,8 @@ from typing import Union, Iterator
 from tqdm.auto import tqdm
 import papyrus_scripts
 import chembl_downloader
+from rdkit.Chem import PandasTools
+from rdkit import Chem
 
 import pandas as pd
 import os
@@ -54,8 +56,8 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
             """
 
         chembl_assays = chembl_downloader.query(query, version=chembl_version,
-                                              prefix=['mutants-in-pcm', 'chembl'])#,
-                                              # chunksize=chunksize)
+                                              prefix=['mutants-in-pcm', 'chembl'])
+
         chembl_assays.to_csv(chembl_file, sep='\t', index=None)
 
     else:
@@ -183,8 +185,12 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
         # Rename columns so they match Papyrus
         dict_rename = {'chembl_id':'CID','assay_id':'AID','canonical_smiles':'SMILES'}
         chembl_with_mutants.rename(dict_rename, axis=1, inplace=True)
+        # Add connectivity ID to identify compounds
+        PandasTools.AddMoleculeColumnToFrame(chembl_with_mutants, 'SMILES', 'Molecule', includeFingerprints=False)
+        chembl_with_mutants['connectivity'] = chembl_with_mutants['Molecule'].apply(lambda x: Chem.MolToInchiKey(x).split('-')[0])
+
         # Keep common subset of columns
-        chembl_with_mutants = chembl_with_mutants[['CID', 'target_id', 'AID', 'accession', 'pchembl_value_Mean', 'SMILES', 'sequence', 'source', 'Activity_class']]
+        chembl_with_mutants = chembl_with_mutants[['CID', 'connectivity', 'target_id', 'AID', 'accession', 'pchembl_value_Mean', 'SMILES', 'sequence', 'source', 'Activity_class']]
 
         # Get Papyrus data with annotated mutants
         papyrus_with_mutants = obtain_papyrus_data(papyrus_version, papyrus_flavor, chunksize)
@@ -196,7 +202,7 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
         # Filter out all ChEMBL related data from Papyrus set to avoid duplicates
         papyrus_with_mutants_nochembl = papyrus_with_mutants[~papyrus_with_mutants['source'].str.contains('ChEMBL')]
         # Keep common subset of columns
-        papyrus_with_mutants_nochembl = papyrus_with_mutants_nochembl[['CID', 'target_id', 'AID', 'accession', 'pchembl_value_Mean', 'SMILES', 'sequence', 'source', 'Activity_class']]
+        papyrus_with_mutants_nochembl = papyrus_with_mutants_nochembl[['CID', 'connectivity','target_id', 'AID', 'accession', 'pchembl_value_Mean', 'SMILES', 'sequence', 'source', 'Activity_class']]
 
         # Concatenate ChEMBL and papyrus data and write file
         chembl_papyrus_with_mutants = pd.concat((chembl_with_mutants, papyrus_with_mutants_nochembl), axis=0, ignore_index=True)
