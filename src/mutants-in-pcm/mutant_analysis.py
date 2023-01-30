@@ -435,7 +435,7 @@ def plot_variant_activity_distribution(data: pd.DataFrame, accession: str, commo
                     else:
                         file.write(f'Skipping accession {accession}\n')
 
-def extract_relevant_targets(file_dir: str, min_subset_n: int = 50, min_error_mean: float = 0.5):
+def extract_relevant_targets(file_dir: str, min_subset_n: int = 50, thres_error_mean: float = 0.5, error_mean_limit: str = 'min'):
     """
     Explore the stats file produced while plotting and extract the most interesting targets from it
     :param file_dir:
@@ -451,14 +451,33 @@ def extract_relevant_targets(file_dir: str, min_subset_n: int = 50, min_error_me
 
     # Extract accession codes where at least one variant has a mean pchembl value difference wo WT bigger than min_error_mean
     mean_error_list = stat_df.groupby(['accession'])['mean_error'].apply(list).reset_index()
-    accession_max_error = mean_error_list[mean_error_list['mean_error'].apply(lambda x: any(np.abs(n) > min_error_mean for n in x))]['accession'].tolist()
+    mean_error_var = stat_df.groupby(['accession'])['mean_error'].std().reset_index()
+    if error_mean_limit == 'min':
+        accession_limit_error = \
+        mean_error_list[mean_error_list['mean_error'].apply(lambda x: any(np.abs(n) > thres_error_mean for n in x))][
+            'accession'].tolist()
+    elif error_mean_limit == 'max':
+        accession_limit_error = \
+        mean_error_list[mean_error_list['mean_error'].apply(lambda x: any((np.abs(n) < thres_error_mean and n != 0)
+                                                                          for n in x))]['accession'].tolist()
+    elif error_mean_limit == 'var_min':
+        accession_limit_error = mean_error_var[mean_error_var['mean_error'] > thres_error_mean]['accession'].tolist()
+    elif error_mean_limit == 'var_max':
+        accession_limit_error = mean_error_var[mean_error_var['mean_error'] < thres_error_mean]['accession'].tolist()
 
     # Keep accession codes that satisfy both conditions
-    accession_keep = list(set(accession_max_subset).intersection(accession_max_error))
+    accession_keep = list(set(accession_max_subset).intersection(accession_limit_error))
     stat_df_keep = stat_df[stat_df['accession'].isin(accession_keep)]
 
     print(f'{len(accession_keep)} targets satisfy the specified conditions:')
-    print(stat_df_keep.groupby(['accession'])['n_accession', 'mean_error'].apply(lambda x: x.abs().max()))
+    if error_mean_limit == 'min':
+        print(stat_df_keep.groupby(['accession'])['n_accession', 'mean_error'].apply(lambda x: x.abs().max()))
+    elif error_mean_limit == 'max':
+        print(stat_df_keep[stat_df_keep['mean_error'] != 0].groupby(['accession'])['n_accession', 'mean_error'].
+              apply(lambda x: x.abs().min()))
+    else:
+        print(stat_df_keep.groupby(['accession'])['n_accession','mean_error'].agg({'n_accession': 'max',
+                                                                                   'mean_error': 'std'}))
 
     return stat_df_keep
 
@@ -489,8 +508,11 @@ if __name__ == '__main__':
     #                                        threshold=2,variant_coverage=0.2, hist=False, plot_mean=True,
     #                                        output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
 
-    extract_relevant_targets(os.path.join(output_dir, 'common_subset_20'))
-    extract_relevant_targets(os.path.join(output_dir,'common_subset_20_sim_80'))
+    # extract_relevant_targets(os.path.join(output_dir, 'common_subset_20'))
+    extract_relevant_targets(os.path.join(output_dir,'common_subset_20_sim_80'), min_subset_n= 50, thres_error_mean=0, error_mean_limit='min')
+    extract_relevant_targets(os.path.join(output_dir, 'common_subset_20_sim_80'), min_subset_n= 50, thres_error_mean=0.1, error_mean_limit='max')
+    extract_relevant_targets(os.path.join(output_dir, 'common_subset_20_sim_80'), min_subset_n= 5, thres_error_mean=1, error_mean_limit='var_min')
+    extract_relevant_targets(os.path.join(output_dir, 'common_subset_20_sim_80'), min_subset_n= 5, thres_error_mean=0.1, error_mean_limit='var_max')
 
 
 
