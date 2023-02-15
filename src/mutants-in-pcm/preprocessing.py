@@ -8,8 +8,11 @@ from typing import Union, Iterator
 from tqdm.auto import tqdm
 import papyrus_scripts
 import chembl_downloader
+from rdkit.Chem import PandasTools
+from rdkit import Chem
 
 import pandas as pd
+import os
 from pandas.io.parsers import TextFileReader as PandasTextFileReader
 from papyrus_scripts.utils import IO as papyrusIO
 
@@ -32,7 +35,7 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
         query = """
             SELECT assays.description,assays.assay_id,assays.variant_id,assays.chembl_id,assays.assay_organism,
                 variant_sequences.mutation,
-                activities.activity_id,activities.pchembl_value,activities.standard_type,
+                activities.activity_id,activities.pchembl_value,activities.standard_type,activities.activity_comment,
                 molecule_dictionary.chembl_id,compound_structures.canonical_smiles,
                 component_sequences.accession,component_sequences.sequence,component_sequences.organism
             FROM assays
@@ -48,11 +51,13 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
                     ON target_dictionary.tid = target_components.tid
                 INNER JOIN component_sequences
                     ON target_components.component_id = component_sequences.component_id
+            WHERE
+                activities.standard_relation = '='
             """
 
         chembl_assays = chembl_downloader.query(query, version=chembl_version,
-                                              prefix=['mutants-in-pcm', 'chembl'])#,
-                                              # chunksize=chunksize)
+                                              prefix=['mutants-in-pcm', 'chembl'])
+
         chembl_assays.to_csv(chembl_file, sep='\t', index=None)
 
     else:
@@ -112,33 +117,102 @@ def obtain_papyrus_data(papyrus_version: str, flavor: str, chunksize: int = None
     papyrus_data = papyrus_scripts.read_papyrus(is3d=stereo, version=papyrus_version, plusplus=only_pp,
                                                 chunksize=chunksize, source_path=data_folder)
 
-    return _keep_papyrus_mutants(papyrus_data)
+    return _keep_targets_with_mutants(papyrus_data, source=f'Papyrus{papyrus_version}')
 
 
-def _keep_papyrus_mutants(data: Union[PandasTextFileReader, pd.DataFrame]) -> Union[Iterator, pd.DataFrame]:
-    """Keep Papyrus data related to mutant proteins only
-
-    :param data: Papyrus data (raw or preprocessed)
+def _keep_targets_with_mutants(data: pd.DataFrame, source:str, predefined_variants: bool = False):
+    """Keep bioactivity data related to proteins with at least one mutant defined
+    :param data: ChEMBL data (raw or preprocessed)
+    :param predefined_variants: whether to use ChEMBL pre-defined variants (True)
+                                or use annotated variants (False)
     """
     if isinstance(data, (PandasTextFileReader, Iterator)):
-        return _chunked_keep_papyrus_mutants(data)
+        generator_with_mutants = _chunked_keep_papyrus_mutants(data,source)
+        data_with_mutants = pd.concat(generator_with_mutants, ignore_index=True)
+
     else:
-        return data[data.Protein_Type != 'WT']
+        if predefined_variants and ('Papyrus' not in source):
+            def revert_annotated_mutation(x):
+                if not isinstance(x['mutation'], str):
+                    target_id = f"{x['accession']}_WT"
+                else:
+                    target_id = x['target_id']
+                return target_id
 
+            # Revert annotated sequence to WT sequence
+            from annotation import mutate_sequence
+            data['sequence'] = mutate_sequence(data, 'sequence', 'target_id', revert = True)
+            # Revert target_id annotation, keeping only pre-defined variants in ChEMBL
+            data['target_id'] = data.apply(revert_annotated_mutation, axis=1)
 
-def _chunked_keep_papyrus_mutants(data: Union[PandasTextFileReader, Iterator]) -> Iterator:
+        # Count number of variants per accession
+        variants_count = data.drop_duplicates(subset=['target_id']).groupby(['accession'])[
+            'target_id'].count().to_dict()
+        # Keep data for targets with variants defined otehr than WT
+        targets_with_mutants = [accession for accession, num_variants in variants_count.items() if num_variants > 1]
+        data_with_mutants = data[data['accession'].isin(targets_with_mutants)]
+
+    return data_with_mutants
+
+def _chunked_keep_papyrus_mutants(data: Union[PandasTextFileReader, Iterator], source:str) -> Iterator:
     """Keep Papyrus data related to mutant proteins only
 
     :param data: Papyrus data (raw or preprocessed)
     """
     for chunk in data:
-        yield _keep_papyrus_mutants(chunk)
+        yield _keep_targets_with_mutants(chunk,source)
 
+
+def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int, predefined_variants: bool = False):
+    """
+    Combine datasets with ChEMBL and Papyrus mutants. Include also WT data for targets with at least one variant defined.
+    Filter out only targets with no variants defined.
+    :param chembl_mutants:
+    :param papyrus_mutants:
+    :return:
+    """
+    if predefined_variants:
+        file_name = f'../../data/chembl{chembl_version}_papyrus{papyrus_version}{papyrus_flavor}_data_with_mutants.csv'
+    else:
+        file_name = f'../../data/chembl{chembl_version}-annotated_papyrus{papyrus_version}{papyrus_flavor}_data_with_mutants.csv'
+
+    if not os.path.exists(file_name):
+        from annotation import chembl_annotation
+        # Get ChEMBL data and extract mutants
+        chembl_annotated = chembl_annotation(chembl_version)
+        chembl_annotated['source'] = f'ChEMBL{chembl_version}'
+        chembl_with_mutants = _keep_targets_with_mutants(chembl_annotated, f'ChEMBL{chembl_version}', predefined_variants)
+        # Rename columns so they match Papyrus
+        dict_rename = {'chembl_id':'CID','assay_id':'AID','canonical_smiles':'SMILES'}
+        chembl_with_mutants.rename(dict_rename, axis=1, inplace=True)
+        # Add connectivity ID to identify compounds
+        PandasTools.AddMoleculeColumnToFrame(chembl_with_mutants, 'SMILES', 'Molecule', includeFingerprints=False)
+        chembl_with_mutants['connectivity'] = chembl_with_mutants['Molecule'].apply(lambda x: Chem.MolToInchiKey(x).split('-')[0])
+
+        # Keep common subset of columns
+        chembl_with_mutants = chembl_with_mutants[['CID', 'connectivity', 'target_id', 'AID', 'accession', 'pchembl_value_Mean', 'SMILES', 'sequence', 'source', 'Activity_class']]
+
+        # Get Papyrus data with annotated mutants
+        papyrus_with_mutants = obtain_papyrus_data(papyrus_version, papyrus_flavor, chunksize)
+        papyrus_with_mutants['source'] = papyrus_with_mutants['source'].apply(lambda x: f'Papyrus{papyrus_version}_{x}')
+        # Add sequence data from protein data file
+        sequences = papyrus_scripts.read_protein_set(version=papyrus_version)[['target_id', 'Sequence']].rename(
+            {'Sequence': 'sequence'}, axis=1)
+        papyrus_with_mutants = pd.merge(papyrus_with_mutants, sequences, on='target_id')
+        # Filter out all ChEMBL related data from Papyrus set to avoid duplicates
+        papyrus_with_mutants_nochembl = papyrus_with_mutants[~papyrus_with_mutants['source'].str.contains('ChEMBL')]
+        # Keep common subset of columns
+        papyrus_with_mutants_nochembl = papyrus_with_mutants_nochembl[['CID', 'connectivity','target_id', 'AID', 'accession', 'pchembl_value_Mean', 'SMILES', 'sequence', 'source', 'Activity_class']]
+
+        # Concatenate ChEMBL and papyrus data and write file
+        chembl_papyrus_with_mutants = pd.concat((chembl_with_mutants, papyrus_with_mutants_nochembl), axis=0, ignore_index=True)
+
+        chembl_papyrus_with_mutants.to_csv(file_name, sep='\t', index=False)
+
+    else:
+        chembl_papyrus_with_mutants = pd.read_csv(file_name, sep='\t')
+
+    return chembl_papyrus_with_mutants
 
 if __name__ == "__main__":
-    # chembl_data = obtain_chembl_data('31', 100_000)
-    papyrus_data = obtain_papyrus_data('05.6', 'nostereo_pp', 1_000_000)
-    # print(sum(len(chunk.index) for chunk in tqdm(papyrus_data)))
-    pd.set_option('display.max_columns', 500)
-    pd.set_option('display.width', 1000)
-    print(next(papyrus_data))
+    combine_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
