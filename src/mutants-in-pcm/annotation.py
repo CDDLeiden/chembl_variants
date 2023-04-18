@@ -392,7 +392,8 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_validated: pd.Data
     assays_df_validated = mutate_sequence(assays_df_validated, 'sequence', 'target_id')
 
     # Keep columns of interest before joining dataframes
-    chembl_df = chembl_df[['assay_id', 'activity_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id', 'canonical_smiles', 'mutation']]
+    chembl_df = chembl_df[['assay_id', 'activity_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id',
+                           'canonical_smiles', 'mutation', 'year']]
     assays_df_validated = assays_df_validated[['assay_id', 'accession', 'target_id', 'sequence']]
 
     # Keep activity pair if pchembl value is defined or if an activity label is defined

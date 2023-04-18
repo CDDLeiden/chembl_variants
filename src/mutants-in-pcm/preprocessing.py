@@ -34,6 +34,7 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
 
         query = """
             SELECT assays.description,assays.assay_id,assays.variant_id,assays.chembl_id,assays.assay_organism,
+                docs.year,docs.abstract,
                 variant_sequences.mutation,
                 activities.activity_id,activities.pchembl_value,activities.standard_type,activities.activity_comment,
                 molecule_dictionary.chembl_id,compound_structures.canonical_smiles,
@@ -41,6 +42,7 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
             FROM assays
                 LEFT JOIN activities USING (assay_id)
                 LEFT JOIN variant_sequences USING (variant_id)
+                LEFT JOIN docs USING (doc_id)
                 INNER JOIN molecule_dictionary
                     ON activities.molregno = molecule_dictionary.molregno
                 INNER JOIN compound_structures
@@ -183,14 +185,16 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
         chembl_annotated['source'] = f'ChEMBL{chembl_version}'
         chembl_with_mutants = _keep_targets_with_mutants(chembl_annotated, f'ChEMBL{chembl_version}', predefined_variants)
         # Rename columns so they match Papyrus
-        dict_rename = {'chembl_id':'CID','assay_id':'AID','canonical_smiles':'SMILES'}
+        dict_rename = {'chembl_id':'CID','assay_id':'AID','canonical_smiles':'SMILES','year':'Year'}
         chembl_with_mutants.rename(dict_rename, axis=1, inplace=True)
         # Add connectivity ID to identify compounds
         PandasTools.AddMoleculeColumnToFrame(chembl_with_mutants, 'SMILES', 'Molecule', includeFingerprints=False)
         chembl_with_mutants['connectivity'] = chembl_with_mutants['Molecule'].apply(lambda x: Chem.MolToInchiKey(x).split('-')[0])
 
         # Keep common subset of columns
-        chembl_with_mutants = chembl_with_mutants[['CID', 'connectivity', 'target_id', 'AID', 'accession', 'pchembl_value_Mean', 'SMILES', 'sequence', 'source', 'Activity_class']]
+        chembl_with_mutants = chembl_with_mutants[['CID', 'connectivity', 'target_id', 'AID', 'accession',
+                                                   'pchembl_value_Mean', 'SMILES', 'sequence', 'source',
+                                                   'Activity_class', 'Year']]
 
         # Get Papyrus data with annotated mutants
         papyrus_with_mutants = obtain_papyrus_data(papyrus_version, papyrus_flavor, chunksize)
@@ -202,7 +206,9 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
         # Filter out all ChEMBL related data from Papyrus set to avoid duplicates
         papyrus_with_mutants_nochembl = papyrus_with_mutants[~papyrus_with_mutants['source'].str.contains('ChEMBL')]
         # Keep common subset of columns
-        papyrus_with_mutants_nochembl = papyrus_with_mutants_nochembl[['CID', 'connectivity','target_id', 'AID', 'accession', 'pchembl_value_Mean', 'SMILES', 'sequence', 'source', 'Activity_class']]
+        papyrus_with_mutants_nochembl = papyrus_with_mutants_nochembl[['CID', 'connectivity','target_id', 'AID',
+                                                                       'accession', 'pchembl_value_Mean', 'SMILES',
+                                                                       'sequence', 'source', 'Activity_class', 'Year']]
 
         # Concatenate ChEMBL and papyrus data and write file
         chembl_papyrus_with_mutants = pd.concat((chembl_with_mutants, papyrus_with_mutants_nochembl), axis=0, ignore_index=True)
