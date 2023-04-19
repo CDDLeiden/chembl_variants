@@ -406,7 +406,7 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_validated: pd.Data
     chembl_bioactivity_df = keep_highest_quality_activity(chembl_mutations_df, 'target_id','chembl_id', 'pchembl_value', 'activity_comment')
 
     # Keep only first item in grouped columns that have the same value
-    for col in ['accession','canonical_smiles','sequence','mutation']:
+    for col in ['accession','canonical_smiles','sequence','mutation','year']:
         chembl_bioactivity_df[col] = chembl_bioactivity_df[col].apply(lambda x: x[0])
 
     return chembl_bioactivity_df
