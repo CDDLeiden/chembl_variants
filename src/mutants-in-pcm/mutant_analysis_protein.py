@@ -178,7 +178,7 @@ def calculate_distance_between_ligand_and_residues_COG(pdbfile:str, chain:str, h
 
     return distance_dict
 
-def calculate_average_residue_distance_to_ligand(accession:str, resn:list, pdb_dir:str, output_dir:str):
+def calculate_average_residue_distance_to_ligand(accession:str, resn:list, common:bool, pdb_dir:str, output_dir:str):
     """
     Calculates average distance from ligand COG to protein residues COG across PDB structures for a Uniprot accession of
     interest. Calculation is done for all residues in the protein, unless a list of residues is passed with resn.
@@ -235,16 +235,32 @@ def calculate_average_residue_distance_to_ligand(accession:str, resn:list, pdb_d
 
                 log_dict[pdb_code]['distance'] = pdb_dist
 
-        # Get common residues between structures (if more than one)
-        common_res = set(pdb_dist_list[0].keys())
-        if len(pdb_dist_list) > 1:
-            for d in pdb_dist_list[1:]:
-                common_res.intersection_update(set(d.keys()))
+        if common:
+            # Get common residues between structures (if more than one)
+            common_res = set(pdb_dist_list[0].keys())
+            if len(pdb_dist_list) > 1:
+                for d in pdb_dist_list[1:]:
+                    common_res.intersection_update(set(d.keys()))
 
-        # Calculate mean distance for each residue across PDB files
-        for res in common_res:
-            accession_average_dist[str(res)] = round(sum(d[res] for d in pdb_dist_list) / len(pdb_dist_list),3)
+            # Calculate mean distance for each residue across PDB files
+            for res in common_res:
+                accession_average_dist[str(res)] = round(sum(d[res] for d in pdb_dist_list) / len(pdb_dist_list),3)
 
+        else:
+            # Get all residues across structures (if more than one)
+            all_res = set()
+            if len(pdb_dist_list) > 1:
+                for d in pdb_dist_list:
+                    all_res.update(d.keys())
+
+            # Calculate mean distance for each residue across PDB files
+            for res in all_res:
+                res_list = []
+                for d in pdb_dist_list:
+                    if res in d.keys():
+                        res_list.append(d[res])
+                res_avg = round(sum(res_list)/len(res_list), 3)
+                accession_average_dist[str(res)] = res_avg
 
         # Write ouytput to json file
         log_dict[f'{accession}_average'] = {}
