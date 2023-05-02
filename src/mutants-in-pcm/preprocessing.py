@@ -33,7 +33,8 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
     if not os.path.isfile(chembl_file):
 
         query = """
-            SELECT assays.description,assays.assay_id,assays.variant_id,assays.chembl_id,assays.assay_organism,
+            SELECT assays.description,assays.assay_id,assays.variant_id,assays.chembl_id as 'assay_chembl_id',
+                assays.assay_organism,
                 docs.year,docs.abstract,
                 variant_sequences.mutation,
                 activities.activity_id,activities.pchembl_value,activities.standard_type,activities.activity_comment,
@@ -220,5 +221,53 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
 
     return chembl_papyrus_with_mutants
 
+def calculate_mean_activity_chembl_papyrus(data: pd.DataFrame):
+    """
+    From a dataset with concatenated ChEMBL and Papyrus entries, compute mean pchembl_value for the same target_id-connectivity pair
+    :param data: DataFrame with activity data
+    :return: DataFrame with unique activity datapoints per target_id - connectivity pair
+    """
+    def agg_functions_variant_connectivity(x):
+        d ={}
+        d['pchembl_value_Mean'] = x['pchembl_value_Mean'].mean()
+        d['Activity_class_consensus'] = pd.Series.mode(x['Activity_class'])
+        d['source'] = list(x['source'])
+        d['SMILES'] = list(x['SMILES'])[0]
+        return pd.Series(d, index=['pchembl_value_Mean', 'Activity_class_consensus', 'source', 'SMILES'])
+
+    agg_activity_data = data.groupby(['target_id','connectivity'], as_index=False).apply(agg_functions_variant_connectivity)
+
+    return agg_activity_data
+
+def merge_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int,
+                                 predefined_variants: bool = False):
+    """
+    Create a dataset with targets with at least one annotated variant from ChEMBL and Papyrus. Merge datasets for
+    connectivity-target_id pairs if data available from both sources.
+    :param chembl_version:
+    :param papyrus_version:
+    :param papyrus_flavor:
+    :param chunksize:
+    :param predefined_variants:
+    :return:
+    """
+    if predefined_variants:
+        file_name = f'../../data/merged_chembl{chembl_version}_papyrus{papyrus_version}{papyrus_flavor}_data_with_mutants.csv'
+    else:
+        file_name = f'../../data/merged_chembl{chembl_version}-annotated_papyrus{papyrus_version}{papyrus_flavor}_data_with_mutants.csv'
+
+    if not os.path.exists(file_name):
+        chembl_papyrus_with_mutants = combine_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor,
+                                                                     chunksize, predefined_variants)
+
+        agg_activity_data = calculate_mean_activity_chembl_papyrus(chembl_papyrus_with_mutants)
+
+        agg_activity_data.to_csv(file_name, sep='\t', index=False)
+
+    else:
+        agg_activity_data = pd.read_csv(file_name, sep='\t')
+
+    return agg_activity_data
+
 if __name__ == "__main__":
-    combine_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
+    merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
