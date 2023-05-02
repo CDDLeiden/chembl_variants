@@ -230,8 +230,8 @@ def calculate_mean_activity_chembl_papyrus(data: pd.DataFrame):
     def agg_functions_variant_connectivity(x):
         d ={}
         d['pchembl_value_Mean'] = x['pchembl_value_Mean'].mean()
-        d['Activity_class_consensus'] = pd.Series.mode(x['Activity_class'])
-        d['source'] = list(x['source'])
+        d['Activity_class_consensus'] = x['Activity_class'].mode()
+        d['source'] = ';'.join(list(set(list(x['source']))))
         d['SMILES'] = list(x['SMILES'])[0]
         d['CID'] = list(x['CID'])[0]
         d['accession'] = list(x['accession'])[0]
