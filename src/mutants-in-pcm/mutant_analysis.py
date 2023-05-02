@@ -19,6 +19,23 @@ from rdkit import DataStructs
 from rdkit.Chem.Fingerprints import FingerprintMols
 from preprocessing import combine_chembl_papyrus_mutants
 
+def calculate_mean_activity_chembl_papyrus(data: pd.DataFrame):
+    """
+    From a dataset with concatenated ChEMBL and Papyrus entries, compute mean pchembl_value for the same target_id-connectivity pair
+    :param data: DataFrame with activity data
+    :return: DataFrame with unique activity datapoints per target_id - connectivity pair
+    """
+    def agg_functions_variant_connectivity(x):
+        d ={}
+        d['pchembl_value_Mean'] = x['pchembl_value_Mean'].mean()
+        d['Activity_class_consensus'] = pd.Series.mode(x['Activity_class'])
+        d['source'] = list(x['source'])
+        d['SMILES'] = list(x['SMILES'])[0]
+        return pd.Series(d, index=['pchembl_value_Mean', 'Activity_class_consensus', 'source', 'SMILES'])
+
+    agg_activity_data = data.groupby(['target_id','connectivity'], as_index=False).apply(agg_functions_variant_connectivity)
+
+    return agg_activity_data
 
 def compute_stats_per_accession(data: pd.DataFrame):
     """
