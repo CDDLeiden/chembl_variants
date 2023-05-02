@@ -233,7 +233,13 @@ def calculate_mean_activity_chembl_papyrus(data: pd.DataFrame):
         d['Activity_class_consensus'] = pd.Series.mode(x['Activity_class'])
         d['source'] = list(x['source'])
         d['SMILES'] = list(x['SMILES'])[0]
-        return pd.Series(d, index=['pchembl_value_Mean', 'Activity_class_consensus', 'source', 'SMILES'])
+        d['CID'] = list(x['CID'])[0]
+        d['accession'] = list(x['accession'])[0]
+        d['sequence'] = list(x['sequence'])[0]
+        d['Year'] = min(x['Year']) # Keep first year when the compound was tested
+
+        return pd.Series(d, index=['pchembl_value_Mean', 'Activity_class_consensus', 'source', 'SMILES', 'CID',
+                                   'accession', 'sequence', 'Year'])
 
     agg_activity_data = data.groupby(['target_id','connectivity'], as_index=False).apply(agg_functions_variant_connectivity)
 
