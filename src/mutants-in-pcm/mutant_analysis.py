@@ -17,25 +17,7 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import PandasTools
 from rdkit import DataStructs
 from rdkit.Chem.Fingerprints import FingerprintMols
-from preprocessing import combine_chembl_papyrus_mutants
-
-def calculate_mean_activity_chembl_papyrus(data: pd.DataFrame):
-    """
-    From a dataset with concatenated ChEMBL and Papyrus entries, compute mean pchembl_value for the same target_id-connectivity pair
-    :param data: DataFrame with activity data
-    :return: DataFrame with unique activity datapoints per target_id - connectivity pair
-    """
-    def agg_functions_variant_connectivity(x):
-        d ={}
-        d['pchembl_value_Mean'] = x['pchembl_value_Mean'].mean()
-        d['Activity_class_consensus'] = pd.Series.mode(x['Activity_class'])
-        d['source'] = list(x['source'])
-        d['SMILES'] = list(x['SMILES'])[0]
-        return pd.Series(d, index=['pchembl_value_Mean', 'Activity_class_consensus', 'source', 'SMILES'])
-
-    agg_activity_data = data.groupby(['target_id','connectivity'], as_index=False).apply(agg_functions_variant_connectivity)
-
-    return agg_activity_data
+from preprocessing import merge_chembl_papyrus_mutants
 
 def compute_stats_per_accession(data: pd.DataFrame):
     """
@@ -50,7 +32,8 @@ def compute_stats_per_accession(data: pd.DataFrame):
         d['connectivity_count'] = len(list(x['connectivity']))
         d['pchembl_value_Mean_Mean'] = x['pchembl_value_Mean'].mean()
         d['pchembl_value_Mean_StD'] = x['pchembl_value_Mean'].std()
-        d['Activity_class_consensus'] = pd.Series.mode(x['Activity_class']) # Check if this does what it's supposed
+        d['Activity_class_consensus'] = pd.Series.mode(x['Activity_class_consensus']) # Check if this does what it's
+        # supposed
         d['source'] = list(set(list(x['source'])))
         return pd.Series(d, index=['connectivity_count', 'pchembl_value_Mean_Mean', 'pchembl_value_Mean_StD',
                                    'Activity_class_consensus', 'source'])
@@ -172,10 +155,7 @@ def get_variant_similar_subset(data:pd.DataFrame, accession:str, sim_thres:int, 
     coverage_file = os.path.join(output_dir, f'modelling_dataset_coverage_{accession}_{options_filename_tag}.json')
 
     if not os.path.exists(dataset_file):
-        data_accession = data[data['accession'] == accession]
-
-        # Combine ChEMBL and Papyrus bioactivity data for plotting
-        data_accession_agg = calculate_mean_activity_chembl_papyrus(data_accession)
+        data_accession_agg = data[data['accession'] == accession]
 
         # Compute or read similarity
         unique_compounds = data_accession_agg.drop_duplicates('connectivity', keep='first')[['connectivity', 'SMILES']]
@@ -290,10 +270,7 @@ def get_variant_common_subset(data: pd.DataFrame, accession:str, common:bool, th
     coverage_file = os.path.join(output_dir, f'modelling_dataset_coverage_{accession}_{options_filename_tag}.json')
 
     if not os.path.exists(dataset_file):
-        data_accession = data[data['accession'] == accession]
-
-        # Combine ChEMBL and Papyrus bioactivity data for plotting
-        data_accession_agg = calculate_mean_activity_chembl_papyrus(data_accession)
+        data_accession_agg = data[data['accession'] == accession]
 
         data_pivoted = pd.pivot(data_accession_agg,index='target_id',columns='connectivity',values='pchembl_value_Mean')
 
@@ -509,6 +486,8 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 # Write figure
                 plt.savefig(os.path.join(output_dir,
                                          f'variant_activity_distribution_{accession}_{options_filename_tag}.png'), dpi=300)
+                plt.savefig(os.path.join(output_dir,
+                                         f'variant_activity_distribution_{accession}_{options_filename_tag}.svg'))
 
                 # Write stats output file
                 target_id_list = [target_id for target_id in hue_order]
@@ -625,10 +604,11 @@ def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: 
 if __name__ == '__main__':
     pd.options.display.width = 0
     # Define output directory for mutant statistical analysis
-    output_dir = 'C:\\Users\gorostiolam\Documents\Gorostiola Gonzalez, Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\0_mutant_statistics'
+    output_dir = 'C:\\Users\gorostiolam\Documents\Gorostiola Gonzalez, ' \
+                 'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\0_mutant_statistics\\1_common_subset'
 
     # Get data with mutants
-    data_with_mutants = combine_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
+    data_with_mutants = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
 
     # Compute quick statistics from data with mutants to check which targets might be of interest
     stats = compute_stats_per_accession(data_with_mutants)
