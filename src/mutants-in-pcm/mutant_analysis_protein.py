@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+
+
+"""Mutant statistics analysis. Part 3"""
+"""Analyze characteristics of mutated protein structures"""
+
 import numpy as np
 import os
 from math import sqrt
