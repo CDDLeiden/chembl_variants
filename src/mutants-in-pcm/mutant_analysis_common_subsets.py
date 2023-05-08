@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
 
-"""Mutant statistics analysis."""
+"""Mutant statistics analysis. Part 1"""
+"""Computing and analyzing bioacivity distributions for common subsets per accession"""
 import json
 import math
 import os
