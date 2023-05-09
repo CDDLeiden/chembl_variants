@@ -1,0 +1,228 @@
+# -*- coding: utf-8 -*-
+
+"""Mutant statistics analysis. Part 3"""
+"""Analyze characteristics of compound sets"""
+
+import pandas as pd
+import seaborn as sns
+import os
+import re
+import json
+import matplotlib.pyplot as plt
+
+from mycolorpy import colorlist as mcp
+import numpy as np
+from matplotlib.patches import Patch
+
+import rdkit
+from rdkit import Chem
+from rdkit import RDConfig
+from rdkit import DataStructs
+from rdkit.Chem import rdFMCS
+from rdkit.Chem import rdMolHash
+from rdkit.Chem import PandasTools
+from rdkit.Chem import Draw
+from rdkit.Chem import rdFingerprintGenerator
+from rdkit.ML.Cluster import Butina
+from rdkit.Chem.Draw import IPythonConsole
+IPythonConsole.molSize=(450,350)
+from rdkit.Chem import rdRGroupDecomposition
+from rdkit.Chem import rdqueries
+from rdkit.Chem import rdDepictor
+from rdkit.Chem.Draw import rdMolDraw2D
+from rdkit import Geometry
+rdDepictor.SetPreferCoordGen(True)
+
+from IPython.display import SVG,Image
+from ipywidgets import interact
+
+
+def GetRingSystems(mol, includeSpiro: bool = False):
+    """
+    Extract ring systems in molecule
+    :param mol: rdkit molecule object
+    :param includeSpiro: whether to include Spiro links as rings
+    :return: list of atoms forming ring systems in the molecule
+    """
+    ri = mol.GetRingInfo()
+    systems = []
+    for ring in ri.AtomRings():
+        ringAts = set(ring)
+        nSystems = []
+        for system in systems:
+            nInCommon = len(ringAts.intersection(system))
+            if nInCommon and (includeSpiro or nInCommon>1):
+                ringAts = ringAts.union(system)
+            else:
+                nSystems.append(system)
+        nSystems.append(ringAts)
+        systems = nSystems
+    return systems
+
+def visualize_molecular_subset_highlights(accession: str, accession_data: pd.DataFrame, subset: list, subset_alias: str,
+                                          match_type: str, substructure_to_match: dict, save: bool, output_dir: str):
+    """
+    Plot 2D molecualr representation of compounds in a subset, highlighting a specific substructure in each molecule 
+    for easier comparison
+    :param accession: target Uniprot accession code 
+    :param accession_data: dataframe with bioactivity data for the target of interest 
+    :param subset: list of compounds in the form of connectivities 
+    :param subset_alias: alias to identify the subset of interest in the output file
+    :param match_type: type of substructure to highlight. Options include: 'Murcko' (highlight most common Murcko 
+    scaffold across the subset), 'ring' (highlight biggest ring system in each molecule), 'MCS' (highlight maximum 
+    common substructure accross the subset), 'SMILES' (highlight an exact match of a SMILES pattern defined in 
+    substructure_to_match), 'SMARTS' (highlight a match for a SMARTS pattern defined in substructure_to_match)
+    :param substructure_to_match: dictionary with the SMILES or SMARTS pattern to match for the accession of interest
+    :param save: whether to save the figure
+    :param output_dir: path to output directory 
+    :return: Figure 
+    """""
+    subset_df = accession_data[accession_data['connectivity'].isin(subset)]
+    # Keep first occurence
+    subset_df.drop_duplicates(subset='connectivity', keep='first', inplace=True, ignore_index=True)
+
+    # Compute molecule from smiles
+    PandasTools.AddMoleculeColumnToFrame(subset_df,'SMILES','Molecule',includeFingerprints=True)
+
+    # Extract RDkit molecular objects
+    mMols = subset_df['Molecule'].tolist()
+
+    if match_type == 'Murcko':
+    # Calculate Murcko Scaffold Hashes
+        murckoHashList = [rdMolHash.MolHash(mMol, rdkit.Chem.rdMolHash.HashFunction.MurckoScaffold) for mMol in mMols]
+
+        # Get the most frequent Murcko Scaffold Hash
+        def mostFreq(list):
+            return max(set(list), key=list.count)
+        mostFreq_murckoHash = mostFreq(murckoHashList)
+
+        # Display molecules with MurkoHash as legends and highlight the mostFreq_murckoHash
+        mostFreq_murckoHash_mol = Chem.MolFromSmiles(mostFreq_murckoHash)
+        highlight_match = [mMol.GetSubstructMatch(mostFreq_murckoHash_mol) for mMol in mMols]
+
+    elif match_type == 'MCS':
+        mcs = rdFMCS.FindMCS(mMols)
+        match_mol = Chem.MolFromSmarts(mcs.smartsString)
+        highlight_match = [mMol.GetSubstructMatch(match_mol) for mMol in mMols]
+
+    elif match_type == 'ring':
+        # Extract ring systems for each molecule
+        ringSys_list = [GetRingSystems(mMol) for mMol in mMols]
+        # Keep the biggest ring system for each molecule
+        highlight_match = [max(ringSys, key=len) for ringSys in ringSys_list]
+
+    elif match_type == 'SMILES':
+        match_mol = Chem.MolFromSmiles(substructure_to_match[match_type])
+        highlight_match = [mMol.GetSubstructMatch(match_mol) for mMol in mMols]
+
+    elif match_type == 'SMARTS':
+        match_mol = Chem.MolFromSmarts(substructure_to_match[match_type])
+        highlight_match = [mMol.GetSubstructMatch(match_mol) for mMol in mMols]
+
+
+    # Draw molecules in grid with the highlight defined
+    img = Draw.MolsToGridImage(mMols, legends=subset,
+                               highlightAtomLists=highlight_match,
+                               subImgSize=(500, 500), useSVG=False, molsPerRow=5, returnPNG=False)
+
+    # Save image
+    if save:
+        img.save(os.path.join(output_dir, f'{accession}_{subset_alias}_highlight_{match_type}.png'))
+
+    return img
+
+def tanimoto_distance_matrix(fp_list: list):
+    """
+    Calculate distance matrix for fingerprint list
+    :param fp_list: list of morgan fingerprints
+    :return: dissimilarity matrix
+    """
+    dissimilarity_matrix = []
+    # Notice how we are deliberately skipping the first and last items in the list
+    # because we don't need to compare them against themselves
+    for i in range(1, len(fp_list)):
+        # Compare the current fingerprint against all the previous ones in the list
+        similarities = DataStructs.BulkTanimotoSimilarity(fp_list[i], fp_list[:i])
+        # Since we need a distance matrix, calculate 1-x for every element in similarity matrix
+        dissimilarity_matrix.extend([1 - x for x in similarities])
+    return dissimilarity_matrix
+
+def butina_cluster_compounds(accession: str, accession_data: pd.DataFrame, subset: list, subset_alias: str,
+                             output_dir: str, cutoff: float = 0.2):
+    """
+    Cluster compounds with Butina algorithm.
+    :param accession: target Uniprot accession code
+    :param accession_data: dataframe with bioactivity data for the target of interest
+    :param subset: list of compounds in the form of connectivities
+    :param subset_alias: alias to identify the subset of interest in the output file
+    :param output_dir: path to output directory
+    :param cutoff: distance cutoff to the cluster central molecule for molecule inclusion in cluster
+    :return: clusters: cluster object
+            compounds: list of (connectivity,molecule object) tuples that were clustered
+            connectivity_cluster_dict: dictionary of connectivities and their assigned cluster
+    """
+    subset_df = accession_data[accession_data['connectivity'].isin(subset)]
+    # Keep first occurence
+    subset_df.drop_duplicates(subset='connectivity', keep='first', inplace=True, ignore_index=True)
+
+    # Compute molecule from smiles
+    PandasTools.AddMoleculeColumnToFrame(subset_df,'SMILES','Molecule',includeFingerprints=True)
+
+    # Extract RDkit molecular objects
+    mMols = subset_df['Molecule'].tolist()
+
+    compounds = []
+    for _, connectivity, mol in subset_df[["connectivity", "Molecule"]].itertuples():
+        compounds.append((mol, connectivity))
+
+    # Create fingerprints for all molecules
+    rdkit_gen = rdFingerprintGenerator.GetRDKitFPGenerator(maxPath=5)
+    fplist = [rdkit_gen.GetFingerprint(mol) for mol in mMols]
+
+    # Calculate Tanimoto distance matrix
+    distance_matrix = tanimoto_distance_matrix(fplist)
+
+    # Now cluster the data with the implemented Butina algorithm:
+    clusters = Butina.ClusterData(distance_matrix, len(fplist), cutoff, isDistData=True)
+    clusters = sorted(clusters, key=len, reverse=True)
+
+    # Give a short report about the numbers of clusters and their sizes
+    num_clust_g1 = sum(1 for c in clusters if len(c) == 1)
+    num_clust_g5 = sum(1 for c in clusters if len(c) > 5)
+    num_clust_g25 = sum(1 for c in clusters if len(c) > 25)
+    num_clust_g100 = sum(1 for c in clusters if len(c) > 100)
+
+    print("total # clusters: ", len(clusters))
+    print("# clusters with only 1 compound: ", num_clust_g1)
+    print("# clusters with >5 compounds: ", num_clust_g5)
+    print("# clusters with >25 compounds: ", num_clust_g25)
+    print("# clusters with >100 compounds: ", num_clust_g100)
+
+    # Plot the size of the clusters
+    fig, ax = plt.subplots(figsize=(15, 4))
+    ax.set_xlabel("Cluster index")
+    ax.set_ylabel("Number of molecules")
+    ax.set_title(f"Threshold: {cutoff:3.1f}")
+    ax.bar(range(1, len(clusters) + 1), [len(c) for c in clusters], lw=5)
+
+    # Save plot
+    plt.savefig(os.path.join(output_dir,f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.png'))
+
+    # Make dictionary mapping cluster index to connectivity
+    connectivity_cluster_dict = {}
+    for i,(mol,connectivity) in enumerate(compounds):
+        for j,cluster in enumerate(clusters):
+            if i in cluster:
+                connectivity_cluster_dict[connectivity] = j + 1 # cluster numbers from 1 on (not zero)
+    with open(os.path.join(output_dir,f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.json'), 'w') as out_file:
+        json.dump(connectivity_cluster_dict, out_file)
+
+    # Visualize molecules in clusters with more than 1 member of strictly common subset, highlighting the MCS in each
+    # cluster
+    for cluster in [i + 1 for i, c in enumerate(clusters) if len(c) > 1]:
+        cluster_connectivities = [k for k, v in connectivity_cluster_dict.items() if v == cluster]
+        visualize_molecular_subset_highlights(accession, accession_data, cluster_connectivities,
+                                              f'{subset_alias}_{cutoff}cluster{cluster}',
+                                              'MCS', {}, True, output_dir)
+
+    return clusters,compounds, connectivity_cluster_dict
