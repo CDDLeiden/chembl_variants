@@ -325,6 +325,32 @@ def get_variant_common_subset(data: pd.DataFrame, accession:str, common:bool, th
 
     return common_subset_melt,coverage_dict
 
+def read_common_subset(accession: str, common: bool, sim: bool, sim_thres: int,
+                                           threshold: int, variant_coverage: float, output_dir: str):
+    """
+    Read the pre-calculated common subset of compounds tested on all (or most) variants, possibly including similar
+    compounds in the definition.
+    :param accession:Uniprot accession code
+    :param common: Whether to use common subset for variants
+    :param sim: Whether similar compounds are included in the definition
+    :param sim_thres: Similarity threshold (Tanimoto) if similarity is used for common subset
+    :param threshold:Minimum number of variants in which a compound has been tested in order to be included in the
+                    common subset
+    :param variant_coverage: Minimum ratio of the common subset of compounds that have been tested on a variant in order
+                            to include that variant in the output
+    :param output_dir: Location for the pre-calculated files
+    :return: pd.DataFrame with pchembl_value, connectivity, and target_id columns for the common subset of interest
+    """
+    # Read bioactivity data for common subset precalculated
+    if not common:
+        data_common = pd.read_csv(os.path.join(output_dir, f'modelling_dataset_{accession}_All.csv'), sep='\t')
+    else:
+        data_common = pd.read_csv(os.path.join(output_dir, f'modelling_dataset_{accession}_Thr{threshold}_Cov'
+                                                          f'{int(variant_coverage*100)}_Sim'
+                                                          f'{int(sim_thres*100)}.csv'), sep='\t')
+
+    return data_common
+
 
 def calculate_variant_stats(data_accession: pd.DataFrame, accession: str, diff: bool):
     """
