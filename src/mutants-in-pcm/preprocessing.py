@@ -221,6 +221,24 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
 
     return chembl_papyrus_with_mutants
 
+def annotate_uniprot_metadata(data: pd.DataFrame, papyrus_version: str):
+    """
+    Add Uniprot metadata to bioactivity dataset (Organism, gene name)
+    :param data: bioactivity dataset with accession column
+    :param papyrus_version: Papyrus version
+    :return: pd.DataFrame annotated
+    """
+    # Read Papyrus protein dataset
+    papyrus_proteins = papyrus_scripts.read_protein_set(version=papyrus_version)
+
+    # Map Uniprot metadata based on accession (not target_id because not all mutants are annotated in Papyrus)
+    papyrus_proteins['accession'] = papyrus_proteins['target_id'].apply(lambda x: x.split('_')[0])
+    mapping_df = papyrus_proteins[['accession', 'UniProtID', 'Organism', 'HGNC_symbol']]
+
+    data_mapped = data.merge(mapping_df, how='left', on='accession')
+
+    return data_mapped
+
 def calculate_mean_activity_chembl_papyrus(data: pd.DataFrame):
     """
     From a dataset with concatenated ChEMBL and Papyrus entries, compute mean pchembl_value for the same target_id-connectivity pair
@@ -267,6 +285,9 @@ def merge_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papy
                                                                      chunksize, predefined_variants)
 
         agg_activity_data = calculate_mean_activity_chembl_papyrus(chembl_papyrus_with_mutants)
+
+        # Annotate Uniprot metadata
+        agg_activity_data = annotate_uniprot_metadata(agg_activity_data, papyrus_version)
 
         agg_activity_data.to_csv(file_name, sep='\t', index=False)
 
