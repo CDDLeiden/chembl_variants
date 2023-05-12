@@ -1,0 +1,508 @@
+# -*- coding: utf-8 -*-
+
+
+"""Mutant statistics analysis. Part X"""
+"""Analyzing mutant data according to the type of mutation"""
+
+import os
+import pandas as pd
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import seaborn as sns
+from Bio.SeqUtils import seq1
+from UniProtMapper import UniProtIDMapper
+mapper = UniProtIDMapper()
+
+from preprocessing import merge_chembl_papyrus_mutants
+from mutant_analysis_protein import calculate_average_residue_distance_to_ligand
+
+
+def map_mutation_distance_BLOSUM62(data: pd.DataFrame):
+    """
+    Annotate amino acid changes with their probability according to the BLOSUM62 matrix. BLOSUM scores range from -4
+    to 11. More positive mean conservative aa change, and negative non-conservative.
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :return: dataframe with bioactivity data and mutation BLOSUM score annotated
+    """
+
+
+def read_mutation_distance_Epstein():
+    """
+    Read Epstein's coefficient of difference distance matrix of amino acid differences. Epstein's coefficient of
+    difference is based on the differences in polarity and size between replaced pairs of amino acids.
+    The lowest the value, the most similar two amino acids.
+    The distances are directional (i.e. F > M is not the same as M > F).
+    :return: dictionary with a value per directional aa change
+    """
+    matrix = pd.read_csv('../../data/Epstein_matrix.csv', sep=';', index_col=0)
+
+    epstein_dict ={}
+
+    for aa_1 in matrix.index.tolist():
+        for aa_2 in matrix.columns:
+            if not aa_1 == aa_2: # Skip silent mutations
+                epstein_dict[f'{seq1(aa_1)}{seq1(aa_2)}'] = matrix.loc[aa_1, aa_2]
+
+
+    return epstein_dict
+
+def map_mutation_distance_Epstein(data: pd.DataFrame):
+    """
+    Annotate amino acid changes with their distance according to the properties defined by Epstein (1967) :
+    polarity, and size.
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :return: dataframe with bioactivity data and mutation distance annotated
+    """
+
+def read_mutation_distance_Grantham():
+    """
+    Read Grantham's distance matrix of amino acid differences. Grantham's distance depends on three properties:
+    composition, polarity and molecular volume. The lowest the value, the most similar two amino acids.
+    The distances are not directional.
+    :return: dictionary with a value per directional aa change
+    """
+    matrix = pd.read_csv('../../data/Grantham_matrix.csv', sep=';', index_col=0)
+
+    grantham_dict ={}
+
+    for aa_1 in matrix.index.tolist():
+        for aa_2 in matrix.columns:
+            if not aa_1 == aa_2: # Skip silent mutations
+                # Matrix is not directional, so aa_1>aa_2 and aa_2>aa_1 is the same
+                aa_change = f'{"".join(sorted([seq1(aa_1),seq1(aa_2)]))}'
+                if not aa_change in grantham_dict.keys():
+                    grantham_dict[aa_change] = matrix.loc[aa_1, aa_2]
+
+    return grantham_dict
+
+def map_mutation_distance_Grantham(data: pd.DataFrame):
+    """
+    Annotate amino acid changes with their distance according to the properties defined by Grantham (1974) :
+    composition, polarity, and molecular volume.
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :return: dataframe with bioactivity data and mutation distance annotated
+    """
+
+def map_aa_change(data: pd.DataFrame, direction: bool = False):
+    """
+    Annotate aminoacid change from wt to mutated aa
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :param direction: whether to take into account the direction of the mutation or just the change itself
+    :return: dataframe with bioactivity data and amino acid change annotated
+    """
+    def extract_aa_change(x):
+        mutation = x['target_id'].split('_')[1]
+        if mutation == 'WT':
+            aa_change = '-'
+        else:
+            wt_aa = mutation[0]
+            mut_aa = mutation[-1]
+            # Discard non-common amino acids
+            aa_list = ['A','G','I','L','P','V','F','W','Y','D','E','R','H','K','S','T','C','M','N','Q']
+            if wt_aa not in aa_list or mut_aa not in aa_list:
+                aa_change = '-'
+            else:
+                aa_change_list = [wt_aa,mut_aa]
+                # Do not consider the directionality of the mutation, just the type of aa change
+                if not direction:
+                    aa_change_list = sorted(aa_change_list)
+                aa_change = ''.join(aa_change_list)
+
+        return aa_change
+
+    data['aa_change'] = data.apply(extract_aa_change, axis=1)
+
+    return data
+
+def map_mutation_type(data: pd.DataFrame):
+    """
+    Annotate mutation type (conservative, polar, size, polar_size) according to the differences in side chain and
+    polarity.
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :return: dataframe with bioactivity data and mutation type annotated
+    """
+    # Define polarity of amino acid chains (reference: Virtual ChemBook Elmhurst College, 2003)
+    non_polar_aas = ['A', 'G', 'I', 'L', 'P', 'V', 'M', 'F']
+    polar_neutral_aas = ['N', 'Q', 'S', 'T', 'Y', 'C', 'W'] # C and W slightly polar
+    polar_acidic_aas = ['E', 'D']
+    polar_basic_aas = ['R', 'H', 'K']
+
+    # Define relative size of amino acid chains  (reference: Epstein, 1967)
+    bulky_aas = ['W', 'K', 'R', 'F'] # Relative size 0.5-0.35
+    intermediate_size_aas = ['H', 'E', 'Q', 'K', 'M', 'D', 'N', 'L', 'I', 'P'] # Relative size 0.30-0.20 (+ P)
+    small_aas = ['C', 'T', 'V', 'A', 'G'] # Relative size 0.15-0 (- P)
+
+    # Define the type of mutation based on whether the amino acid changes its polarity or size group
+    def define_mutation_type(wt_aa,mut_aa):
+        # Define type of polarity change
+        for polarity_group in [non_polar_aas, polar_neutral_aas, polar_acidic_aas, polar_basic_aas]:
+            if wt_aa in polarity_group and mut_aa in polarity_group:
+                polarity_type = 'conservative'
+                break
+        else:
+            polarity_type = 'polar'
+        # Give its own label to a change of polarity that involves a flip of charge
+        if (wt_aa in polar_acidic_aas and mut_aa in polar_basic_aas) or (wt_aa in polar_basic_aas and mut_aa in
+                                                                         polar_acidic_aas):
+            polarity_type = 'charge'
+
+        # Define type of size change
+        for size_group in [bulky_aas, intermediate_size_aas, small_aas]:
+            if wt_aa in size_group and mut_aa in size_group:
+                size_type = 'conservative'
+                break
+        else:
+            size_type = 'size'
+
+        # Make the final mutation type tag based both on polarity and size characteristics
+        mutation_type = '_'.join(sorted(list(set([polarity_type, size_type]))))
+        mutation_type = mutation_type.replace('_conservative', '').replace('conservative_', '')
+
+        return mutation_type
+
+    # Map mutation type to amino acid change in target_id
+    def map_mutation_type_target_id(x):
+        mutation = x['target_id'].split('_')[1]
+        if mutation == 'WT':
+            mutation_type = 'NA'
+        else:
+            wt_aa = mutation[0]
+            mut_aa = mutation[-1]
+            mutation_type = define_mutation_type(wt_aa, mut_aa)
+
+        return mutation_type
+
+    data['mutation_type'] = data.apply(map_mutation_type_target_id, axis=1)
+
+    return data
+
+def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direction: bool = True, counts: str = 'activity',
+                                    color: str = 'mutation_type', subset_col: str = None, subset_value: str = None,
+                                    aa_change_labels: bool = True):
+    """
+    Plot in stacked bars all unique amino acid change occurrences (number of activity datapoints or number of
+    variants) in each mutation type category.
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :param output_dir: directory to save the plot
+    :param direction: whether to take into account the direction of the mutation or just the change itself
+    :param counts: what property to count in the x axis. Options are 'activity' (number of activity datapoints) and
+    'variant' (number of variants).
+    :param color: what property to use to color. Options are 'mutation_type' (all aa changes with the same mutation
+    type have the same color in different shades) and 'distance_matrix' (each aa change has a color depending on the
+    distance matrix coefficient, either Epstein if direction=True ot Grantham is direction=False)
+    :param subset_col: column to make a subset for
+    :param subset_value: value of the column in subset_col to filter on
+    :param aa_change_labels: whether to include aa change labels on top of each stacked bar layer.
+    :return: figure
+    """
+    # Annotate bioactivity data with aa change and mutation type
+    data_aa_change = map_mutation_type(map_aa_change(data, direction))
+
+    # Make a subset
+    if subset_col is not None:
+        data_aa_change = data_aa_change[data_aa_change[subset_col] == subset_value]
+        subset_flag = f'_{subset_col}-{subset_value}'
+    else:
+        subset_flag = ''
+
+    # Keep only one datapoint per variant if plotting the number of variants instead of the number of datapoints
+    if counts == 'variant':
+        data_aa_change = data_aa_change.drop_duplicates(subset='target_id', keep='first')
+
+    # Calculate the number of counts (activity datapoints/variants) for each type of aa change
+    stats = data_aa_change.groupby(['aa_change', 'mutation_type']).count()
+    plot_df = stats.loc[:, "pchembl_value_Mean"].reset_index()
+    # Remove WT instances (aa change == '-')
+    plot_df = plot_df[plot_df['aa_change'] != '-']
+    # Filter out silent mutations
+    plot_df = plot_df[plot_df['aa_change'].apply(lambda x: x[0] != x[1])]
+
+    # Order mutation types based on their total number of datapoints
+    stats_mutation_type = data_aa_change.groupby(['mutation_type']).count()['pchembl_value_Mean'].\
+        reset_index().sort_values(by='pchembl_value_Mean', axis=0, ascending=False)
+    mutation_types = ['conservative', 'polar', 'size', 'charge', 'polar_size', 'charge_size']
+    mutation_types_order = [x for x in stats_mutation_type['mutation_type'].tolist() if x != 'NA']
+    mutation_types_order.extend([x for x in mutation_types if x not in mutation_types_order])
+    mutation_types_order.reverse()
+
+    # Make dictionaries with number of datapoints and types of aa change for each mutation type
+    bar_values = {}
+    bar_labels = {}
+    for mutation_type in mutation_types_order:
+        mutation_type_df = plot_df[plot_df['mutation_type'] == mutation_type].sort_values(by='aa_change', axis=0)
+        aa_changes = mutation_type_df['aa_change'].tolist()
+        aa_change_counts = mutation_type_df['pchembl_value_Mean'].tolist()
+        bar_values[mutation_type] = aa_change_counts
+        bar_labels[mutation_type] = aa_changes
+
+    # Define colors
+    if color == 'mutation_type':
+        # Define colors for mutation types, and set in the right order according to how disruptive the type is
+        palette_dict = {k: v for k, v in
+                        zip(mutation_types, sns.color_palette("rocket_r", n_colors=len(mutation_types)))}
+        colors_order = [palette_dict[k] for k in mutation_types_order]
+
+    elif color == 'distance_matrix':
+        if direction:
+            # Use Epstein matrix, as it is directional
+            distance_dict = read_mutation_distance_Epstein()
+        else:
+            # Use Grantham matrix, which is not directional
+            distance_dict = read_mutation_distance_Grantham()
+
+        # Define colors for each aa change in order of minimum to maximum distance
+        distance_color_dict = {k: c for (k, v), c in zip(sorted(distance_dict.items(), key=lambda item: item[1]),
+                                                         sns.color_palette("rocket_r", n_colors=len(
+                                                             distance_dict.items())))}
+
+    # Plot stacked bars from dictionaries defined above
+    plt.rcParams["figure.figsize"] = [10, 7]
+    plt.rcParams["figure.autolayout"] = True
+    fig, ax = plt.subplots()
+
+    # Each layer of stacked bars is plotted at a time
+    for i in range(0, len(max(list(bar_values.values()), key=len)), 1):
+        # Number of datapoints of each amino acid change (bar width)
+        bar_i_list = [v[i] if (len(v) > 0 and len(v) > i) else 0 for v in bar_values.values()]
+        # Aggregated number of datapoints of the previous layer of stacked bars (bar left limit)
+        bar_i_left = [sum(v[:i]) for v in bar_values.values()]
+        # Amino acid change label positions (middle of the stacked bar layer)
+        bar_i_label_pos = [(sum(v[:i+1]) + sum(v[:i]))/2 for v in bar_values.values()]
+        # Amino acid change label
+        bar_i_labels = [v[i] if (len(v) > 0 and len(v) > i) else '' for v in bar_labels.values()]
+
+
+        if color == 'mutation_type':
+            # Each mutation type has the same color, the alpha changes to differentiate between aa changes
+            plt.barh([x.replace('_',' ').capitalize() for x in mutation_types_order], bar_i_list, left=bar_i_left,
+            alpha=1/(i+1),color=colors_order, edgecolor='grey')
+
+        elif color == 'distance_matrix':
+            # Color of each aa change
+            bar_i_colors = [distance_color_dict[aa_change] if aa_change != '' else (0.98137749, 0.92061729, 0.86536915)
+            for aa_change in bar_i_labels]
+            # Each aa change has a different color given by the distance matrix
+            plt.barh([x.replace('_', ' ').capitalize() for x in mutation_types_order], bar_i_list, left=bar_i_left,
+                     alpha=1,color=bar_i_colors, edgecolor='grey')
+
+        # Add aa change label on top of bar segment
+        if aa_change_labels:
+            for j,mut_type in enumerate(mutation_types_order):
+                plt.text(bar_i_label_pos[j],j, bar_i_labels[j], ha='center', va='center', size=8, color='white', weight='bold')
+
+
+    # Add color legend
+    if color == 'mutation_type':
+        legend = [mpatches.Patch(color=v, label=k.replace('_',' ').capitalize()) for k,v in palette_dict.items()]
+        plt.legend(handles=legend, title='Mutation type (severity)', loc='center left', bbox_to_anchor=(1, 0.5),
+                   handleheight=4, handlelength=4)
+
+
+    # Make plot prettier
+    # Despine
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+
+    # Switch off ticks
+    plt.tick_params(left=False,bottom=False)
+
+    # Draw vertical axis lines
+    vals = ax.get_xticks()
+    for tick in vals:
+        ax.axvline(x=tick, linestyle='dashed', alpha=0.4, color='#eeeeee', zorder=1)
+
+    # Set x-axis label
+    if counts =='activity':
+        x_label = 'Number of bioactivity datapoints'
+    elif counts == 'variant':
+        x_label = 'Number of variants'
+    ax.set_xlabel(x_label, labelpad=20, weight='bold', size=12)
+
+    # Set y-axis label
+    ax.set_ylabel("Mutation type", labelpad=20, weight='bold', size=12)
+
+    # Set title
+    plt.suptitle(f'Mutation types present in ChEMBL + Papyrus bioactivity datasets', fontsize=16)
+    if subset_col is not None:
+        if subset_col == 'accession':
+            # map accession to gene name
+            result, failed = mapper(
+                ids=[subset_value], from_db="UniProtKB_AC-ID", to_db='Gene_Name')
+            plt.title(f'Subset {subset_col}:{subset_value} ({result["to"].tolist()[0]})', fontsize=12)
+        else:
+            plt.title(f'Subset {subset_col}:{subset_value}', fontsize=12)
+
+    # Save plot
+    if direction:
+        direction_flag = 'Dir'
+    else:
+        direction_flag = 'NoDir'
+
+    out_file = f'mutation_type_stacked{subset_flag}_{direction_flag}_Counts{counts}_Color{color}_Labels{aa_change_labels}.svg'
+    plt.savefig(os.path.join(output_dir, out_file))
+
+    # Create the colorbar (this is an independent plot)
+    if color == 'distance_matrix':
+        # Create new figure for the colormap
+        fig, ax = plt.subplots(figsize=(1, 3))
+        fig.subplots_adjust(bottom=0.5)
+        # Make colorbar
+        cmap = sns.color_palette('rocket_r', as_cmap=True)
+        norm = mpl.colors.Normalize(vmin=min(list(distance_dict.values())), vmax=max(list(distance_dict.values())))
+        # Plot colorbar
+        cb = mpl.colorbar.ColorbarBase(norm=norm, cmap=cmap, orientation="vertical", ax=ax)
+        # Remove the outline of the colorbar
+        cb.outline.set_visible(False)
+        # Set legend label and move it to the top (instead of default bottom)
+        if direction:
+            cb.set_label("Epstein coefficient of difference", size=10, labelpad=10)
+        else:
+            cb.set_label("Grantham's distance", size=10, labelpad=10)
+
+        # Save plot
+        out_file = f'mutation_type_stacked{subset_flag}_{direction_flag}_Counts{counts}_Color{color}_Labels' \
+                   f'{aa_change_labels}_ColorMap.svg'
+        plt.savefig(os.path.join(output_dir, out_file))
+
+def plot_bubble_aachange_distance(data: pd.DataFrame, accession: str, dist_dir: str, output_dir: str,
+                                  direction: bool = True):
+    """
+    Plot bubble plot for all mutants of target of interest (accession), showing aa distance matrix value (X axis) vs.
+    distance from mutated residue to ligand COG (Y axis). Color represents mutation type and bubble size number of
+    bioactivity.
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :param accession: Uniprot accession code to target of interest
+    :param dist_dir: Path to directory containing the distance dictionaries
+    :param output_dir: path to directory to store output
+    :param direction: whether to take into account the direction of the mutation or just the change itself
+    :return: figure
+    """
+    # Subset accession
+    data = data[data['accession'] == accession]
+
+    # Annotate bioactivity data with aa change and mutation type
+    data_aa_change = map_mutation_type(map_aa_change(data, direction))
+
+    # Drop WT instances
+    data_aa_change = data_aa_change[data_aa_change['aa_change'] != '-']
+    # Filter out silent mutations
+    data_aa_change = data_aa_change[data_aa_change['aa_change'].apply(lambda x: x[0] != x[1])]
+
+    # Calculate the number of counts (activity datapoints/variants) for each type of aa change
+    stats = data_aa_change.groupby(['target_id', 'aa_change', 'mutation_type']).count()
+    plot_df = stats.loc[:, "pchembl_value_Mean"].reset_index()
+
+    # Annotate amino acid change distance matrix
+    if direction:
+        # Use Epstein matrix, as it is directional
+        distance_dict = read_mutation_distance_Epstein()
+    else:
+        # Use Grantham matrix, which is not directional
+        distance_dict = read_mutation_distance_Grantham()
+    plot_df['distance_matrix'] = plot_df['aa_change'].apply(lambda x: distance_dict[x])
+
+    # Calculate distance to ligand from mutated residues
+    mutants_resn = [int(target_id.split('_')[1][1:-1]) if 'WT' not in target_id else 'WT' for target_id in
+                    plot_df['target_id'].tolist()]
+    distances_dict = calculate_average_residue_distance_to_ligand(accession=accession,
+                                                                  resn=mutants_resn,
+                                                                  common=False,
+                                                                  pdb_dir=os.path.join(dist_dir, 'PDB'),
+                                                                  output_dir=dist_dir)
+    # Map distances to mutants
+    plot_df['mutant_dist'] = plot_df['target_id'].apply(lambda x: distances_dict[x.split('_')[1][1:-1]]
+    if (('WT' not in x) and (x.split('_')[1][1:-1] in distances_dict.keys())) else 0)
+
+    # Define colors for mutation types, map to color property
+    mutation_types = ['conservative', 'polar', 'size', 'charge', 'polar_size', 'charge_size']
+    palette_dict = {k: v for k, v in
+                    zip(mutation_types, sns.color_palette("rocket_r", n_colors=len(mutation_types)))}
+    plot_df['mutation_type_color'] = plot_df['mutation_type'].apply(lambda x: palette_dict[x])
+
+    # Plot bubble plot
+    fig, ax = plt.subplots(figsize=(6.5, 5))
+
+    scatter = plt.scatter(
+        x=plot_df['distance_matrix'],
+        y=plot_df['mutant_dist'],
+        s=plot_df['pchembl_value_Mean'],
+        c=plot_df['mutation_type_color'],
+        label=plot_df['mutation_type'],
+        cmap="Accent",
+        alpha=0.6,
+        edgecolors="white",
+        linewidth=2)
+
+    # Add titles (main and on axis)
+    if direction:
+        plt.xlabel("Epstein coefficient of difference")
+    else:
+        plt.xlabel("Grantham's distance")
+
+    plt.ylabel("Average distance of mutated residue to ligand COG ($\AA$)")
+    # map accession to gene name
+    result, failed = mapper(
+        ids=[accession], from_db="UniProtKB_AC-ID", to_db='Gene_Name')
+    plt.title(f"Target {accession} ({result['to'].tolist()[0]})")
+
+    # Add legends for color and size
+    handles = [mpl.lines.Line2D([0], [0], marker='o', alpha=0.6, linewidth=0, color=v,markeredgecolor='white',
+                                label=k.replace('_',' ').capitalize(),markersize=7) for k,v in palette_dict.items()]
+    legend1 = ax.legend(handles=handles,
+                        title='Mutation type', loc='lower left',
+                        bbox_to_anchor=(1,0.55))
+    ax.add_artist(legend1)
+
+    handles, labels = scatter.legend_elements(prop="sizes", alpha=0.6, num=8, color='silver', markeredgewidth=0.0)
+    legend2 = ax.legend(handles, labels, loc="upper left", title="Number of datapoints", bbox_to_anchor=(1, 0.55))
+
+    # Add limits
+    plt.ylim(0, 30)
+    if direction:
+        plt.xlim(0, 1.1)
+    else:
+        plt.xlim(0, 216)
+
+    plt.tight_layout()
+
+    # Save plot
+    if direction:
+        direction_flag = 'Dir'
+    else:
+        direction_flag = 'NoDir'
+
+    out_file = f'mutation_type_bubble_{accession}_{direction_flag}.svg'
+    plt.savefig(os.path.join(output_dir, out_file))
+
+
+if __name__ == "__main__":
+    pd.options.display.width = 0
+
+    output_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
+             'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\3_mutation_type'
+
+    # Read mutant annotated data
+    data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
+
+    # Plot stack bars with type of amino acid changes
+    plot_stacked_bars_mutation_type(data, output_dir, True, 'variant', 'mutation_type', None, None, False)
+    plot_stacked_bars_mutation_type(data, output_dir, False, 'variant', 'mutation_type', None, None, False)
+    plot_stacked_bars_mutation_type(data, output_dir, True, 'activity','mutation_type', 'accession', 'P00533')
+    plot_stacked_bars_mutation_type(data, output_dir, True, 'activity', 'distance_matrix', 'accession', 'P00533')
+    plot_stacked_bars_mutation_type(data, output_dir, False, 'activity', 'distance_matrix', 'accession', 'P00533')
+
+    # Plot bubble plots with correlation between amino acid differences and distance to ligand COG
+    dist_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
+             'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\1_common_subset'
+    for accession in ['P00533', 'Q72547', 'P00519']:
+        plot_bubble_aachange_distance(data, accession, dist_dir, output_dir, True)
+
+
+
+
+
+
+
