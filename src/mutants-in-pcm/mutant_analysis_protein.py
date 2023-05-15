@@ -23,7 +23,10 @@ def map_accession_to_pdb(accession:str):
         ids=[accession], from_db="UniProtKB_AC-ID", to_db="PDB"
     )
 
-    pdb_list = result["to"].tolist()
+    try:
+        pdb_list = result["to"].tolist()
+    except KeyError:
+        pdb_list = []
 
     return pdb_list
 
