@@ -367,21 +367,32 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
                    f'{aa_change_labels}_ColorMap.svg'
         plt.savefig(os.path.join(output_dir, out_file))
 
-def plot_bubble_aachange_distance(data: pd.DataFrame, accession: str, dist_dir: str, output_dir: str,
-                                  direction: bool = True):
+def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subset_alias: str, dist_dir: str,
+                                  output_dir: str, direction: bool = True):
     """
-    Plot bubble plot for all mutants of target of interest (accession), showing aa distance matrix value (X axis) vs.
+    Plot bubble plot for all mutants of targets of interest (accession), showing aa distance matrix value (X axis) vs.
     distance from mutated residue to ligand COG (Y axis). Color represents mutation type and bubble size number of
     bioactivity.
     :param data: dataframe with bioactivity data and mutations reflected in target_id
-    :param accession: Uniprot accession code to target of interest
+    :param accession_list: List of Uniprot accession codes to targets of interest
+    :param subset_alias: Alias of the subset of accession codes for naming the output file
     :param dist_dir: Path to directory containing the distance dictionaries
     :param output_dir: path to directory to store output
     :param direction: whether to take into account the direction of the mutation or just the change itself
     :return: figure
     """
-    # Subset accession
-    data = data[data['accession'] == accession]
+    # Subset accession codes
+    data = data[data['accession'].isin(accession_list)]
+
+    # Extract gene names for later mapping
+    gene_dict = dict(zip(data['accession'],data['HGNC_symbol'].fillna('NaN')))
+    # Fill gene ID from Uniprot API if not available in dataset
+    accession_list_no_gene = [k for k,v in gene_dict.items() if v == 'NaN']
+    if len(accession_list_no_gene) > 0:
+        result, failed = mapper(ids=accession_list_no_gene, from_db="UniProtKB_AC-ID", to_db='Gene_Name')
+        gene_dict_fix = dict(zip(result['from'],result['to']))
+        gene_dict = {k:v1 if v1 != 'NaN' else gene_dict_fix[k] for k,v1 in gene_dict.items()}
+
 
     # Annotate bioactivity data with aa change and mutation type
     data_aa_change = map_mutation_type(map_aa_change(data, direction))
@@ -405,16 +416,19 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession: str, dist_dir: 
     plot_df['distance_matrix'] = plot_df['aa_change'].apply(lambda x: distance_dict[x])
 
     # Calculate distance to ligand from mutated residues
-    mutants_resn = [int(target_id.split('_')[1][1:-1]) if 'WT' not in target_id else 'WT' for target_id in
-                    plot_df['target_id'].tolist()]
-    distances_dict = calculate_average_residue_distance_to_ligand(accession=accession,
-                                                                  resn=mutants_resn,
-                                                                  common=False,
-                                                                  pdb_dir=os.path.join(dist_dir, 'PDB'),
-                                                                  output_dir=dist_dir)
+    distances_dict = {}
+    for accession in accession_list:
+        mutants_resn = [int(target_id.split('_')[1][1:-1]) if ('WT' not in target_id and accession in target_id) else
+                        'WT' for target_id in plot_df['target_id'].tolist()]
+        distances_dict[accession] = calculate_average_residue_distance_to_ligand(accession=accession,
+                                                                      resn=mutants_resn,
+                                                                      common=False,
+                                                                      pdb_dir=os.path.join(dist_dir, 'PDB'),
+                                                                      output_dir=dist_dir)
+
     # Map distances to mutants
-    plot_df['mutant_dist'] = plot_df['target_id'].apply(lambda x: distances_dict[x.split('_')[1][1:-1]]
-    if (('WT' not in x) and (x.split('_')[1][1:-1] in distances_dict.keys())) else 0)
+    plot_df['mutant_dist'] = plot_df['target_id'].apply(lambda x: distances_dict[x.split('_')[0]][x.split('_')[1][1:-1]]
+    if (('WT' not in x) and (x.split('_')[1][1:-1] in distances_dict[x.split('_')[0]].keys())) else 0)
 
     # Define colors for mutation types, map to color property
     mutation_types = ['conservative', 'polar', 'size', 'charge', 'polar_size', 'charge_size']
@@ -443,10 +457,8 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession: str, dist_dir: 
         plt.xlabel("Grantham's distance")
 
     plt.ylabel("Average distance of mutated residue to ligand COG ($\AA$)")
-    # map accession to gene name
-    result, failed = mapper(
-        ids=[accession], from_db="UniProtKB_AC-ID", to_db='Gene_Name')
-    plt.title(f"Target {accession} ({result['to'].tolist()[0]})")
+    # map accession list to gene names
+    plt.title(f"{', '.join(accession_list)}\n({', '.join([gene_dict[accession] for accession in accession_list])})")
 
     # Add legends for color and size
     handles = [mpl.lines.Line2D([0], [0], marker='o', alpha=0.6, linewidth=0, color=v,markeredgecolor='white',
@@ -474,7 +486,7 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession: str, dist_dir: 
     else:
         direction_flag = 'NoDir'
 
-    out_file = f'mutation_type_bubble_{accession}_{direction_flag}.svg'
+    out_file = f'mutation_type_bubble_{subset_alias}_{direction_flag}.svg'
     plt.savefig(os.path.join(output_dir, out_file))
 
 
@@ -497,8 +509,8 @@ if __name__ == "__main__":
     # Plot bubble plots with correlation between amino acid differences and distance to ligand COG
     dist_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
              'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\1_common_subset'
-    for accession in ['P00533', 'Q72547', 'P00519']:
-        plot_bubble_aachange_distance(data, accession, dist_dir, output_dir, True)
+    for i,accession_list in enumerate([['P00533'],['P00519'],['Q72547']]):
+        plot_bubble_aachange_distance(data, accession_list, accession_list[0], dist_dir, output_dir, True)
 
 
 
