@@ -233,6 +233,7 @@ def annotate_uniprot_metadata(data: pd.DataFrame, papyrus_version: str):
 
     # Map Uniprot metadata based on accession (not target_id because not all mutants are annotated in Papyrus)
     papyrus_proteins['accession'] = papyrus_proteins['target_id'].apply(lambda x: x.split('_')[0])
+    papyrus_proteins.drop_duplicates(subset='accession', inplace=True)
     mapping_df = papyrus_proteins[['accession', 'UniProtID', 'Organism', 'HGNC_symbol']]
 
     data_mapped = data.merge(mapping_df, how='left', on='accession')
@@ -284,10 +285,10 @@ def merge_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papy
         chembl_papyrus_with_mutants = combine_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor,
                                                                      chunksize, predefined_variants)
 
-        agg_activity_data = calculate_mean_activity_chembl_papyrus(chembl_papyrus_with_mutants)
+        agg_activity_data_not_annotated = calculate_mean_activity_chembl_papyrus(chembl_papyrus_with_mutants)
 
         # Annotate Uniprot metadata
-        agg_activity_data = annotate_uniprot_metadata(agg_activity_data, papyrus_version)
+        agg_activity_data = annotate_uniprot_metadata(agg_activity_data_not_annotated, papyrus_version)
 
         agg_activity_data.to_csv(file_name, sep='\t', index=False)
 
