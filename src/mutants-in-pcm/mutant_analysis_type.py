@@ -368,7 +368,7 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
         plt.savefig(os.path.join(output_dir, out_file))
 
 def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subset_alias: str, dist_dir: str,
-                                  output_dir: str, direction: bool = True):
+                                  output_dir: str, direction: bool = True, ignore_no_structure: bool = False):
     """
     Plot bubble plot for all mutants of targets of interest (accession), showing aa distance matrix value (X axis) vs.
     distance from mutated residue to ligand COG (Y axis). Color represents mutation type and bubble size number of
@@ -379,6 +379,8 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     :param dist_dir: Path to directory containing the distance dictionaries
     :param output_dir: path to directory to store output
     :param direction: whether to take into account the direction of the mutation or just the change itself
+    :param ignore_no_structure: whether to ignore accession codes for which the distance to ligand COG cannot be
+    calculated due to lack of structures
     :return: figure
     """
     # Subset accession codes
@@ -417,14 +419,22 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
 
     # Calculate distance to ligand from mutated residues
     distances_dict = {}
+    accession_list_clean = []
     for accession in accession_list:
         mutants_resn = [int(target_id.split('_')[1][1:-1]) if ('WT' not in target_id and accession in target_id) else
                         'WT' for target_id in plot_df['target_id'].tolist()]
-        distances_dict[accession] = calculate_average_residue_distance_to_ligand(accession=accession,
+        distances_dict_accession = calculate_average_residue_distance_to_ligand(accession=accession,
                                                                       resn=mutants_resn,
                                                                       common=False,
                                                                       pdb_dir=os.path.join(dist_dir, 'PDB'),
                                                                       output_dir=dist_dir)
+
+        # Drop targets with no distance dict
+        if ignore_no_structure and len(distances_dict_accession.values()) == 0:
+            plot_df = plot_df[~plot_df['target_id'].str.contains(accession)]
+        else:
+            distances_dict[accession] = distances_dict_accession
+            accession_list_clean.append(accession)
 
     # Map distances to mutants
     plot_df['mutant_dist'] = plot_df['target_id'].apply(lambda x: distances_dict[x.split('_')[0]][x.split('_')[1][1:-1]]
@@ -458,7 +468,8 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
 
     plt.ylabel("Average distance of mutated residue to ligand COG ($\AA$)")
     # map accession list to gene names
-    plt.title(f"{', '.join(accession_list)}\n({', '.join([gene_dict[accession] for accession in accession_list])})")
+    plt.title(f"{', '.join(accession_list_clean)}\n"
+              f"({', '.join([gene_dict[accession] for accession in accession_list_clean])})")
 
     # Add legends for color and size
     handles = [mpl.lines.Line2D([0], [0], marker='o', alpha=0.6, linewidth=0, color=v,markeredgecolor='white',
