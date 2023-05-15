@@ -393,6 +393,10 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     if len(accession_list_no_gene) > 0:
         result, failed = mapper(ids=accession_list_no_gene, from_db="UniProtKB_AC-ID", to_db='Gene_Name')
         gene_dict_fix = dict(zip(result['from'],result['to']))
+        for acc in accession_list_no_gene:
+            if acc not in gene_dict_fix.keys():
+                gene_dict_fix[acc] = 'NaN'
+
         gene_dict = {k:v1 if v1 != 'NaN' else gene_dict_fix[k] for k,v1 in gene_dict.items()}
 
 
