@@ -78,8 +78,10 @@ def get_pdb_ligand_chain(pdbfile:str, hetname:str):
                     chain = line[21:22]
                     if chain not in ligand_chains:
                         ligand_chains.append(chain)
-
-    return ligand_chains[0]
+    try:
+        return ligand_chains[0]
+    except IndexError:
+        return ''
 
 
 def get_pdb_protein_residues(pdbfile: str, chain: str):
@@ -95,8 +97,12 @@ def get_pdb_protein_residues(pdbfile: str, chain: str):
             # Select the right chain
             if line[21:22] == chain:
                 if line.startswith('ATOM'):
-                    if int(line[22:27]) not in resn_list:
-                        resn_list.append(int(line[22:27]))
+                    try:
+                        if int(line[22:27]) not in resn_list:
+                            resn_list.append(int(line[22:27]))
+                    # Account for alternative residue atom positions
+                    except ValueError:
+                        continue
 
     return resn_list
 
