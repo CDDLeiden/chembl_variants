@@ -129,7 +129,7 @@ def map_mutation_type(data: pd.DataFrame):
     polar_basic_aas = ['R', 'H', 'K']
 
     # Define relative size of amino acid chains  (reference: Epstein, 1967)
-    bulky_aas = ['W', 'K', 'R', 'F'] # Relative size 0.5-0.35
+    bulky_aas = ['W', 'Y', 'R', 'F'] # Relative size 0.5-0.35
     intermediate_size_aas = ['H', 'E', 'Q', 'K', 'M', 'D', 'N', 'L', 'I', 'P'] # Relative size 0.30-0.20 (+ P)
     small_aas = ['C', 'T', 'V', 'A', 'G'] # Relative size 0.15-0 (- P)
 
