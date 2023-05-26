@@ -226,11 +226,25 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
     mutation_types_order.extend([x for x in mutation_types if x not in mutation_types_order])
     mutation_types_order.reverse()
 
+    # Read distance matrices to order amino acid changes in stacked bars by more to less disruptive
+    if direction:
+        # Use Epstein matrix, as it is directional
+        distance_dict = read_mutation_distance_Epstein()
+    else:
+        # Use Grantham matrix, which is not directional
+        distance_dict = read_mutation_distance_Grantham()
+
+    plot_df['distance'] = plot_df['aa_change'].map(distance_dict)
+
     # Make dictionaries with number of datapoints and types of aa change for each mutation type
     bar_values = {}
     bar_labels = {}
     for mutation_type in mutation_types_order:
-        mutation_type_df = plot_df[plot_df['mutation_type'] == mutation_type].sort_values(by='aa_change', axis=0)
+        # Sort mutation stacked bars by aa_change (alphabetical order)
+        # mutation_type_df = plot_df[plot_df['mutation_type'] == mutation_type].sort_values(by='aa_change', axis=0)
+        # Sort mutation types by how disruptive the aa_change is (distance matrix)
+        mutation_type_df = plot_df[plot_df['mutation_type'] == mutation_type].sort_values(by='distance',
+                                                                                           ascending=False,axis=0)
         aa_changes = mutation_type_df['aa_change'].tolist()
         aa_change_counts = mutation_type_df['pchembl_value_Mean'].tolist()
         bar_values[mutation_type] = aa_change_counts
@@ -244,13 +258,6 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
         colors_order = [palette_dict[k] for k in mutation_types_order]
 
     elif color == 'distance_matrix':
-        if direction:
-            # Use Epstein matrix, as it is directional
-            distance_dict = read_mutation_distance_Epstein()
-        else:
-            # Use Grantham matrix, which is not directional
-            distance_dict = read_mutation_distance_Grantham()
-
         # Define colors for each aa change in order of minimum to maximum distance
         distance_color_dict = {k: c for (k, v), c in zip(sorted(distance_dict.items(), key=lambda item: item[1]),
                                                          sns.color_palette("rocket_r", n_colors=len(
@@ -276,7 +283,7 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
         if color == 'mutation_type':
             # Each mutation type has the same color, the alpha changes to differentiate between aa changes
             plt.barh([x.replace('_',' ').capitalize() for x in mutation_types_order], bar_i_list, left=bar_i_left,
-            alpha=1/(i+1),color=colors_order, edgecolor='grey')
+            alpha=1/(1+i*0.1),color=colors_order, edgecolor='grey')
 
         elif color == 'distance_matrix':
             # Color of each aa change
@@ -425,8 +432,11 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     distances_dict = {}
     accession_list_clean = []
     for accession in accession_list:
-        mutants_resn = [int(target_id.split('_')[1][1:-1]) if ('WT' not in target_id and accession in target_id) else
+        try:
+            mutants_resn = [int(target_id.split('_')[1][1:-1]) if ('WT' not in target_id and accession in target_id) else
                         'WT' for target_id in plot_df['target_id'].tolist()]
+        except ValueError:
+            mutants_resn = []
         distances_dict_accession = calculate_average_residue_distance_to_ligand(accession=accession,
                                                                       resn=mutants_resn,
                                                                       common=False,
@@ -472,8 +482,11 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
 
     plt.ylabel("Average distance of mutated residue to ligand COG ($\AA$)")
     # map accession list to gene names
-    plt.title(f"{', '.join(accession_list_clean)}\n"
-              f"({', '.join([gene_dict[accession] for accession in accession_list_clean])})")
+    if len(accession_list_clean) < 10:
+        plt.title(f"{', '.join(accession_list_clean)}\n"
+                  f"({', '.join([gene_dict[accession] for accession in accession_list_clean])})")
+    else:
+        plt.title(subset_alias)
 
     # Add legends for color and size
     handles = [mpl.lines.Line2D([0], [0], marker='o', alpha=0.6, linewidth=0, color=v,markeredgecolor='white',
