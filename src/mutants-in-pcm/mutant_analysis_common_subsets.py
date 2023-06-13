@@ -390,8 +390,8 @@ def define_consistent_palette(data: pd.DataFrame, accession: str):
     :return: seaborn color palette
     """
     palette = {f'{accession}_WT': '#808080'} # Initialize with WT as grey
-    list_colors = sns.color_palette("pastel6",n_colors=71).as_hex()
     list_variants = [target_id for target_id in data[data['accession'] == accession]['target_id'].unique().tolist() if not 'WT' in target_id]
+    list_colors = sns.color_palette("Spectral", n_colors=len(list_variants)).as_hex()
     try:
         list_variants_sorted = sorted(list_variants, key=lambda x: int(x.split('_')[1][1:-1]))
     except ValueError:
@@ -460,10 +460,12 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 hue_order = [target_id for target_id in palette.keys() if target_id in data_accession['target_id'].unique().tolist()]
                 if not hist: # Plot distribution curve
                     g = sns.displot(data_accession, x='pchembl_value_Mean', hue='target_id', kind='kde', fill=True,
-                                    palette=palette, hue_order=hue_order, height=5, aspect=1.5, warn_singular=False)
+                                    palette=palette, hue_order=hue_order, height=3.5, aspect=1.1, warn_singular=False,
+                                    facet_kws={'despine':False})
                 else: # Plot histograms
                     g = sns.displot(data_accession, x='pchembl_value_Mean', hue='target_id', kde=True,
-                                    palette=palette, hue_order=hue_order, height=5, aspect=1.5, warn_singular=False)
+                                    palette=palette, hue_order=hue_order, height=3.5, aspect=1.1, warn_singular=False,
+                                    facet_kws={'despine':False})
 
                 # Calculate subset variant statistics for reporting (and plotting)
                 data_mean, data_std = calculate_variant_stats(data_accession, accession, diff=False)
@@ -474,7 +476,7 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                     for i, variant in enumerate(data_accession['target_id'].unique().tolist()):
                         variant_mean = data_mean.loc[data_mean['target_id'] == variant, 'pchembl_value_Mean_Mean'].item()
                         variant_std = data_std.loc[data_std['target_id'] == variant, 'pchembl_value_Mean_Std'].item()
-                        plt.axvline(variant_mean, color=palette[variant])
+                        plt.axvline(variant_mean, color=palette[variant], linestyle=':', alpha=0.8, linewidth=1.0)
 
                 # Add to variant legend: 1) Mean +/- Std pchembl_value 2) number of compounds 3) coverage of compounds in (sub)set
                 if not sim:
@@ -508,11 +510,14 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                     options_legend_tag = f'Full set n={len(data_accession["connectivity"].unique().tolist())}'
 
                 g._legend.set_title(f'{accession} variants\n{options_legend_tag}')
+                sns.move_legend(g, bbox_to_anchor=(0.75, 0.5), loc='center left')
                 plt.xlabel('pChEMBL value (Mean)')
+                plt.xlim(2, 12)
 
                 # Write figure
                 plt.savefig(os.path.join(output_dir,
-                                         f'variant_activity_distribution_{accession}_{options_filename_tag}.png'), dpi=300)
+                                         f'variant_activity_distribution_{accession}_{options_filename_tag}.png'),
+                                         bbox_inches='tight', dpi=300)
                 plt.savefig(os.path.join(output_dir,
                                          f'variant_activity_distribution_{accession}_{options_filename_tag}.svg'))
 
