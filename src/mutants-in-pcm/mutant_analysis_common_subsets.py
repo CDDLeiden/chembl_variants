@@ -352,19 +352,20 @@ def read_common_subset(accession: str, common: bool, sim: bool, sim_thres: int,
     return data_common
 
 
-def calculate_variant_stats(data_accession: pd.DataFrame, accession: str, diff: bool):
+def calculate_variant_stats(data_accession: pd.DataFrame, accession: str, diff: bool, one_on_one: bool):
     """
     Calculate mean and StD of activity values for each variant of one target (accession)
     :param data_accession: DataFrame with mutation activity data for accession of interest
     :param accession: Uniprot accession code
-    :param diff: Whether to calculate the mean and StD for the difference in bioactivity from WT to all accession
+    :param diff: Whether to calculate the difference in Mean and StD between variants and WT
+    :param one_on_one: Whether to calculate the mean and StD for the difference in bioactivity from WT to all accession
                 variants in a set. This allows to compare not just the difference between variant means but the mean
                 between one-on-one differences in a common subset of compounds
     :return: two dataframes with mean and standard deviation values for each variant
     """
     data_pivoted = pd.pivot(data_accession, index='connectivity', columns='target_id', values='pchembl_value_Mean')
 
-    if diff:
+    if diff and one_on_one:
         for target_id in [col for col in data_pivoted.columns if col != 'target_id']:
             try:
                 data_pivoted[f'{target_id}_WTdif'] = data_pivoted.apply(lambda x: x[target_id] - x[f'{accession}_WT'], axis=1)
@@ -374,7 +375,19 @@ def calculate_variant_stats(data_accession: pd.DataFrame, accession: str, diff: 
     data_mean = data_pivoted.mean(axis=0).reset_index(name='pchembl_value_Mean_Mean')
     data_std = data_pivoted.std(axis=0).apply(lambda x: x if not math.isnan(x) else 0).reset_index(name='pchembl_value_Mean_Std')
 
-    if diff:
+    if diff and not one_on_one:
+        mean_WT = data_mean[data_mean['target_id'] == f'{accession}_WT']['pchembl_value_Mean_Mean'].values[0]
+        def calculate_mean_diff(row):
+            if row['target_id'] != f'{accession}_WT':
+                mean_diff = row['pchembl_value_Mean_Mean'] - mean_WT
+            else:
+                mean_diff = 0
+            return mean_diff
+
+        data_mean['pchembl_value_Mean_Mean'] = data_mean.apply(calculate_mean_diff, axis=1)
+        data_std['pchembl_value_Mean_Std'] = data_std['pchembl_value_Mean_Std'].apply(lambda x: x if not math.isnan(x) else 0)
+
+    if diff and one_on_one:
         data_mean = data_mean[data_mean['target_id'].str.contains('WTdif')]
         data_mean['target_id'] = data_mean['target_id'].apply(lambda x: x.replace('_WTdif',''))
         data_std = data_std[data_std['target_id'].str.contains('WTdif')]
@@ -473,8 +486,9 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                                     facet_kws={'despine':False})
 
                 # Calculate subset variant statistics for reporting (and plotting)
-                data_mean, data_std = calculate_variant_stats(data_accession, accession, diff=False)
-                data_mean_error, data_std_error = calculate_variant_stats(data_accession, accession, diff=True)
+                data_mean, data_std = calculate_variant_stats(data_accession, accession, diff=False, one_on_one=False)
+                data_mean_error, data_std_error = calculate_variant_stats(data_accession, accession, diff=True, one_on_one=False)
+                data_mean_error_strict, data_std_error_strict = calculate_variant_stats(data_accession, accession, diff=True, one_on_one=True)
 
                 # Plot Mean pchembl_value per variant
                 if plot_mean:
@@ -532,7 +546,8 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 mean_list = [data_mean.loc[data_mean['target_id'] == target_id, 'pchembl_value_Mean_Mean'].item() for target_id in target_id_list]
                 std_list = [data_std.loc[data_std['target_id'] == target_id, 'pchembl_value_Mean_Std'].item() for target_id in target_id_list]
                 mean_error_list = [data_mean_error.loc[data_mean_error['target_id'] == target_id, 'pchembl_value_Mean_Mean'].item() for target_id in target_id_list]
-                std_error_list = [data_std_error.loc[data_std_error['target_id'] == target_id, 'pchembl_value_Mean_Std'].item() for target_id in target_id_list]
+                mean_error_strict_list = [data_mean_error_strict.loc[data_mean_error_strict['target_id'] == target_id, 'pchembl_value_Mean_Mean'].item() for target_id in target_id_list]
+                std_error_strict_list = [data_std_error_strict.loc[data_std_error_strict['target_id'] == target_id, 'pchembl_value_Mean_Std'].item() for target_id in target_id_list]
                 n_accession_list = [len(data_accession['connectivity'].unique().tolist()) for x in target_id_list]
                 n_target_id_list = [sum(data_accession[data_accession["target_id"] == target_id]["pchembl_value_Mean"].notna().tolist()) for target_id in target_id_list]
                 coverage_list = [coverage_dict[target_id][0] for target_id in target_id_list]
@@ -541,7 +556,8 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                              'mean_pchembl':mean_list,
                              'std_pchembl':std_list,
                              'mean_error':mean_error_list,
-                             'std_error':std_error_list,
+                             'mean_error_strict':mean_error_strict_list,
+                             'std_error_strict':std_error_strict_list,
                              'n_accession':n_accession_list,
                              'n_target_id':n_target_id_list,
                              'coverage':coverage_list}
