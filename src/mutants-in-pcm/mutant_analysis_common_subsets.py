@@ -406,7 +406,7 @@ def define_consistent_palette(data: pd.DataFrame, accession: str):
 
 def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, common: bool, sim: bool, sim_thres: int,
                                        threshold: int, variant_coverage: float, plot: bool, hist: bool, plot_mean: bool,
-                                       save_dataset: bool, output_dir: str):
+                                       color_palette: dict, save_dataset: bool, output_dir: str):
     """
     Generate (sub)set of bioactivity data for target and options of interest and compute variant activity distribution
     with the option to plot it and report the dataset and statistics
@@ -423,6 +423,8 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 This will save the figure file (.png) and append statistics (.txt) in output_dir
     :param hist: Whether to plot activity distribution as histogram instead of smooth kde distribution curve
     :param plot_mean: Whether to plot variant's mean as a vertical line
+    :param color_palette: (Optional) Dictionary with colors for plotting. If not provided, it will be generated
+                        automatically
     :param save_dataset: Whether to save the (subset) modelling dataset used for computing activity distribution
     :param output_dir: Location for the output files
     :return: None
@@ -441,7 +443,10 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
 
     else:
         # Define color palette and plotting order to ensure consistent colors over different subsets
-        palette = define_consistent_palette(data,accession)
+        if not color_palette == None:
+            palette = color_palette
+        else:
+            palette = define_consistent_palette(data,accession)
 
         # Calculate common subset for plotting (with or without similarity match amplification) and save if specified
         if not sim:
@@ -653,15 +658,16 @@ if __name__ == '__main__':
         # Full dataset
         compute_variant_activity_distribution(data_with_mutants, accession, common=False, sim=False, sim_thres=None,
                                               threshold=None, variant_coverage=None, plot=True, hist=False, plot_mean=True,
-                                              save_dataset=False,output_dir=os.path.join(output_dir, 'all'))
+                                              color_palette=None,save_dataset=False,output_dir=os.path.join(output_dir,
+                                                                                                       'all'))
         # Strict common subset with > 20% coverage
         compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=False, sim_thres=None,
                                            threshold=2,variant_coverage=0.2, plot=True, hist=False, plot_mean=True,
-                                           save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20'))
+                                           color_palette=None,save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20'))
         # Common subset with > 20% coverage including similar compounds (>80% Tanimoto) tested in other variants
         compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=True, sim_thres=0.8,
                                            threshold=2,variant_coverage=0.2, plot=True, hist=False, plot_mean=True,
-                                           save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
+                                           color_palette=None,save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
 
     # Extract relevant targets for reporting and modelling (using common subset with similarity)
     # A) Check which targets have the biggest common subsets
@@ -686,15 +692,15 @@ if __name__ == '__main__':
         # Full dataset
         compute_variant_activity_distribution(data_with_mutants, accession, common=False, sim=False, sim_thres=None,
                                               threshold=None, variant_coverage=None, plot=False, hist=False, plot_mean=True,
-                                              save_dataset=True,output_dir=os.path.join(output_dir, 'all'))
+                                              color_palette=None,save_dataset=True,output_dir=os.path.join(output_dir, 'all'))
         # Strict common subset with > 20% coverage
         compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=False, sim_thres=None,
                                            threshold=2,variant_coverage=0.2, plot=False, hist=False, plot_mean=True,
-                                           save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20'))
+                                           color_palette=None,save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20'))
         # Common subset with > 20% coverage including similar compounds (>80% Tanimoto) tested in other variants
         compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=True, sim_thres=0.8,
                                            threshold=2,variant_coverage=0.2, plot=False, hist=False, plot_mean=True,
-                                           save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
+                                           color_palette=None,save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
 
 
 
