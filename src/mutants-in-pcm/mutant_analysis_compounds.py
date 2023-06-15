@@ -38,7 +38,7 @@ from ipywidgets import interact
 
 from preprocessing import merge_chembl_papyrus_mutants
 from mutant_analysis_accession import filter_accession_data
-from mutant_analysis_common_subsets import compute_variant_activity_distribution, get_variant_common_subset
+from mutant_analysis_common_subsets import compute_variant_activity_distribution, get_variant_common_subset, define_consistent_palette
 
 
 def GetRingSystems(mol, includeSpiro: bool = False):
@@ -254,11 +254,20 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, output_dir: str
     accession_data_common = accession_data[accession_data['connectivity'].
         isin(common_data['connectivity'].unique().tolist())]
 
-    # Butina cluster compounds in the common subset
-    clusters, compounds, connectivity_cluster_dict = \
-        butina_cluster_compounds(accession, accession_data_common,
-                                 accession_data_common.connectivity.unique().tolist(),
-                                 'full_set', os.path.join(output_dir, accession), 0.5)
+    # Check if clustering was already done, if so read in results
+    if os.path.exists(os.path.join(output_dir, accession, f'{accession}_full_set_ButinaClusters_0.5.json')):
+        with open(os.path.join(output_dir, accession, f'{accession}_full_set_ButinaClusters_0.5.json'), 'r') as in_file:
+            connectivity_cluster_dict = json.load(in_file)
+            print(f'Loaded {len(connectivity_cluster_dict)} clusters for {accession}')
+    else:
+        # Butina cluster compounds in the common subset
+        clusters, compounds, connectivity_cluster_dict = \
+            butina_cluster_compounds(accession, accession_data_common,
+                                     accession_data_common.connectivity.unique().tolist(),
+                                     'full_set', os.path.join(output_dir, accession), 0.5)
+
+    # Define consistent color palette that includes all variants
+    palette_dict = define_consistent_palette(accession_data, accession)
 
     # Plot bioactivity distribution for 10 largest clusters
     for i in range(1, 11):
@@ -273,13 +282,15 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, output_dir: str
         # Plot distribution
         compute_variant_activity_distribution(data_cluster, accession, common=False, sim=False, sim_thres=None,
                                               threshold=None, variant_coverage=None, plot=True, hist=False,
-                                              plot_mean=True, save_dataset=False, output_dir=cluster_dir)
+                                              plot_mean=True, color_palette=palette_dict, save_dataset=False,
+                                              output_dir=cluster_dir)
 
 
 if __name__ == '__main__':
     output_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
              'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\4_compound_clusters'
 
-    # Plot distributions of bioactivities in most populated Butina clusters
-    for accesion in ['P00533', 'Q72547', 'O75874']:
-        plot_bioactivity_distribution_cluster_subset(accesion, output_dir)
+    # Plot distributions of bioactivities in most populated Butina clusters for targets with > 90 compounds
+    for accession in ['P00533', 'Q72547', 'O75874','O60885','P00519','P07949','P10721','P13922','P15056','P22607',
+    'P30613','P36888','Q15910','Q5S007','Q9UM73']:
+        plot_bioactivity_distribution_cluster_subset(accession, output_dir)
