@@ -376,16 +376,20 @@ def calculate_variant_stats(data_accession: pd.DataFrame, accession: str, diff: 
     data_std = data_pivoted.std(axis=0).apply(lambda x: x if not math.isnan(x) else 0).reset_index(name='pchembl_value_Mean_Std')
 
     if diff and not one_on_one:
-        mean_WT = data_mean[data_mean['target_id'] == f'{accession}_WT']['pchembl_value_Mean_Mean'].values[0]
-        def calculate_mean_diff(row):
-            if row['target_id'] != f'{accession}_WT':
-                mean_diff = row['pchembl_value_Mean_Mean'] - mean_WT
-            else:
-                mean_diff = 0
-            return mean_diff
+        try:
+            mean_WT = data_mean[data_mean['target_id'] == f'{accession}_WT']['pchembl_value_Mean_Mean'].values[0]
+            def calculate_mean_diff(row):
+                if row['target_id'] != f'{accession}_WT':
+                    mean_diff = row['pchembl_value_Mean_Mean'] - mean_WT
+                else:
+                    mean_diff = 0
+                return mean_diff
 
-        data_mean['pchembl_value_Mean_Mean'] = data_mean.apply(calculate_mean_diff, axis=1)
-        data_std['pchembl_value_Mean_Std'] = data_std['pchembl_value_Mean_Std'].apply(lambda x: x if not math.isnan(x) else 0)
+            data_mean['pchembl_value_Mean_Mean'] = data_mean.apply(calculate_mean_diff, axis=1)
+            data_std['pchembl_value_Mean_Std'] = data_std['pchembl_value_Mean_Std'].apply(lambda x: x if not math.isnan(x) else 0)
+        except IndexError:  # WT might not be included in the subset due to lack of data
+            data_mean['pchembl_value_Mean_Mean'] = np.NaN
+            data_std['pchembl_value_Mean_Std'] = np.NaN
 
     if diff and one_on_one:
         data_mean = data_mean[data_mean['target_id'].str.contains('WTdif')]
