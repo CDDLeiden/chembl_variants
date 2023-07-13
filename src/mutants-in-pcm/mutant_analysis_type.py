@@ -76,6 +76,22 @@ def read_mutation_distance_Grantham():
 
     return grantham_dict
 
+def read_blosum():
+    """
+    Read BLOSUM62 matrix
+    :return:
+    """
+    matrix = pd.read_csv('../../data/BLOSUM62.txt', sep=';', index_col=0, skiprows=6)
+
+    blosum_dict ={}
+
+    for aa_1 in matrix.index.tolist():
+        for aa_2 in matrix.columns:
+            if not aa_1 == aa_2: # Skip silent mutations
+                blosum_dict[f'{aa_1}{aa_2}'] = matrix.loc[aa_1, aa_2]
+
+    return blosum_dict
+
 def map_mutation_distance_Grantham(data: pd.DataFrame):
     """
     Annotate amino acid changes with their distance according to the properties defined by Grantham (1974) :
@@ -176,6 +192,89 @@ def map_mutation_type(data: pd.DataFrame):
     data['mutation_type'] = data.apply(map_mutation_type_target_id, axis=1)
 
     return data
+
+def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'activity',subset_col: str = None,
+                           subset_value: str = None):
+    """
+    Plot in heatmap all unique amino acid change occurrences (number of activity datapoints or number of variants).
+
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :param output_dir: directory to save the plot
+    :param counts: what property to count in the heatmap. Options are 'activity' (number of activity datapoints),
+        'variant' (number of variants), 'blosum' (BLOSUM62 matrix), or 'Epstein' (Epstein coefficient of difference).
+    :param subset_col: column in data to subset by
+    :param subset_value: value in subset_col to subset by
+    """
+    # Annotate bioactivity data with aa change and mutation type
+    data_aa_change = map_mutation_type(map_aa_change(data, direction=True))
+
+    # Make a subset
+    if subset_col is not None:
+        data_aa_change = data_aa_change[data_aa_change[subset_col] == subset_value]
+        subset_flag = f'_{subset_col}-{subset_value}'
+    else:
+        subset_flag = ''
+
+    # Keep only one datapoint per variant if plotting the number of variants instead of the number of datapoints
+    if counts == 'variant':
+        data_aa_change = data_aa_change.drop_duplicates(subset='target_id', keep='first')
+
+    # Drop WT instances
+    data_aa_change = data_aa_change[data_aa_change['aa_change'] != '-']
+    # Filter out silent mutations
+    data_aa_change = data_aa_change[data_aa_change['aa_change'].apply(lambda x: x[0] != x[1])]
+
+    # Read Epstein and BLOSUM matrix
+    distance_dict = read_mutation_distance_Epstein()
+    blosum_dict = read_blosum()
+
+    # Calculate statistics to plot in heatmap
+    stats = data_aa_change.groupby(['aa_change', 'mutation_type'])['pchembl_value_Mean'].count().reset_index()
+    stats['distance_matrix'] = stats['aa_change'].apply(lambda x: distance_dict[x])
+    stats['BLOSUM'] = stats['aa_change'].apply(lambda x: blosum_dict[x])
+
+    # Define WT and mut amino acids for plotting
+    stats['wt_aa'] = stats['aa_change'].apply(lambda x: x[0])
+    stats['mut_aa'] = stats['aa_change'].apply(lambda x: x[1])
+
+    # Pivot statistics to plot in heatmap
+    if (counts == 'activity') or (counts == 'variant'):
+        stats_heatmap = stats.pivot(columns='mut_aa',index='wt_aa',values='pchembl_value_Mean')
+        if counts == 'activity':
+            cbar_label = 'Number of bioactivity datapoints'
+            # Report which are the most represented mutations
+            top10_aa_change = stats.sort_values('pchembl_value_Mean', ascending=False).head(10)['aa_change'].tolist()
+            top10_aa_change_mutations = data_aa_change[data_aa_change['aa_change'].isin(top10_aa_change)].groupby([
+                'target_id', 'aa_change'])['pchembl_value_Mean'].count().reset_index()
+            top10_aa_change_mutations['aa_change_total'] = top10_aa_change_mutations['aa_change'].map(
+                stats.set_index('aa_change')['pchembl_value_Mean'])
+            top10_aa_change_mutations['aa_change_fraction'] = top10_aa_change_mutations['pchembl_value_Mean'] / \
+                                                                top10_aa_change_mutations['aa_change_total']
+            top10_aa_change_mutations = top10_aa_change_mutations.sort_values(['aa_change_total','aa_change_fraction'],
+                                                                              axis=0, ascending=False)
+
+            top10_aa_change_mutations.to_csv(os.path.join(output_dir, f'top10_aa_change_mutations_ac'
+                                                                      f'tivity{subset_flag}.csv'),sep='\t',index=False)
+        elif counts == 'variant':
+            cbar_label = 'Number of variants'
+    elif counts == 'blosum':
+        stats_heatmap = stats.pivot(columns='mut_aa',index='wt_aa',values='BLOSUM')
+        cbar_label = 'BLOSUM62 score'
+    elif counts == 'Epstein':
+        stats_heatmap = stats.pivot(columns='mut_aa',index='wt_aa',values='distance_matrix')
+        cbar_label = 'Epstein coefficient of difference'
+
+    stats_heatmap.fillna(0,inplace=True)
+
+    # Plot heatmap
+    plt.figure(1,figsize=(5.5,5))
+    ax = sns.heatmap(data=stats_heatmap, annot=False, cmap='rocket_r', cbar_kws={'label': cbar_label})
+    ax.set(xlabel="", ylabel="")
+    ax.xaxis.tick_top()
+    plt.yticks(rotation=0)
+
+    # Save heatmap
+    plt.savefig(os.path.join(output_dir,f'heatmap_{counts}{subset_flag}.png'),dpi=300)
 
 def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direction: bool = True, counts: str = 'activity',
                                     color: str = 'mutation_type', subset_col: str = None, subset_value: str = None,
@@ -526,6 +625,10 @@ if __name__ == "__main__":
 
     # Read mutant annotated data
     data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
+
+    # Plot heatmaps with amino acid change counts
+    plot_heatmap_aa_change(data, output_dir, 'variant', None, None)
+    plot_heatmap_aa_change(data, output_dir, 'activity', None, None)
 
     # Plot stack bars with type of amino acid changes
     plot_stacked_bars_mutation_type(data, output_dir, True, 'variant', 'mutation_type', None, None, False)

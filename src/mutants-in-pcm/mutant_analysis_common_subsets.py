@@ -12,6 +12,9 @@ import numpy as np
 import re
 import matplotlib.pyplot as plt
 import seaborn as sns
+import glob
+from matplotlib.markers import MarkerStyle
+import re
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -352,19 +355,20 @@ def read_common_subset(accession: str, common: bool, sim: bool, sim_thres: int,
     return data_common
 
 
-def calculate_variant_stats(data_accession: pd.DataFrame, accession: str, diff: bool):
+def calculate_variant_stats(data_accession: pd.DataFrame, accession: str, diff: bool, one_on_one: bool):
     """
     Calculate mean and StD of activity values for each variant of one target (accession)
     :param data_accession: DataFrame with mutation activity data for accession of interest
     :param accession: Uniprot accession code
-    :param diff: Whether to calculate the mean and StD for the difference in bioactivity from WT to all accession
+    :param diff: Whether to calculate the difference in Mean and StD between variants and WT
+    :param one_on_one: Whether to calculate the mean and StD for the difference in bioactivity from WT to all accession
                 variants in a set. This allows to compare not just the difference between variant means but the mean
                 between one-on-one differences in a common subset of compounds
     :return: two dataframes with mean and standard deviation values for each variant
     """
     data_pivoted = pd.pivot(data_accession, index='connectivity', columns='target_id', values='pchembl_value_Mean')
 
-    if diff:
+    if diff and one_on_one:
         for target_id in [col for col in data_pivoted.columns if col != 'target_id']:
             try:
                 data_pivoted[f'{target_id}_WTdif'] = data_pivoted.apply(lambda x: x[target_id] - x[f'{accession}_WT'], axis=1)
@@ -374,7 +378,23 @@ def calculate_variant_stats(data_accession: pd.DataFrame, accession: str, diff: 
     data_mean = data_pivoted.mean(axis=0).reset_index(name='pchembl_value_Mean_Mean')
     data_std = data_pivoted.std(axis=0).apply(lambda x: x if not math.isnan(x) else 0).reset_index(name='pchembl_value_Mean_Std')
 
-    if diff:
+    if diff and not one_on_one:
+        try:
+            mean_WT = data_mean[data_mean['target_id'] == f'{accession}_WT']['pchembl_value_Mean_Mean'].values[0]
+            def calculate_mean_diff(row):
+                if row['target_id'] != f'{accession}_WT':
+                    mean_diff = row['pchembl_value_Mean_Mean'] - mean_WT
+                else:
+                    mean_diff = 0
+                return mean_diff
+
+            data_mean['pchembl_value_Mean_Mean'] = data_mean.apply(calculate_mean_diff, axis=1)
+            data_std['pchembl_value_Mean_Std'] = data_std['pchembl_value_Mean_Std'].apply(lambda x: x if not math.isnan(x) else 0)
+        except IndexError:  # WT might not be included in the subset due to lack of data
+            data_mean['pchembl_value_Mean_Mean'] = np.NaN
+            data_std['pchembl_value_Mean_Std'] = np.NaN
+
+    if diff and one_on_one:
         data_mean = data_mean[data_mean['target_id'].str.contains('WTdif')]
         data_mean['target_id'] = data_mean['target_id'].apply(lambda x: x.replace('_WTdif',''))
         data_std = data_std[data_std['target_id'].str.contains('WTdif')]
@@ -390,8 +410,8 @@ def define_consistent_palette(data: pd.DataFrame, accession: str):
     :return: seaborn color palette
     """
     palette = {f'{accession}_WT': '#808080'} # Initialize with WT as grey
-    list_colors = sns.color_palette("pastel6",n_colors=71).as_hex()
     list_variants = [target_id for target_id in data[data['accession'] == accession]['target_id'].unique().tolist() if not 'WT' in target_id]
+    list_colors = sns.color_palette("Spectral", n_colors=len(list_variants)).as_hex()
     try:
         list_variants_sorted = sorted(list_variants, key=lambda x: int(x.split('_')[1][1:-1]))
     except ValueError:
@@ -406,7 +426,7 @@ def define_consistent_palette(data: pd.DataFrame, accession: str):
 
 def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, common: bool, sim: bool, sim_thres: int,
                                        threshold: int, variant_coverage: float, plot: bool, hist: bool, plot_mean: bool,
-                                       save_dataset: bool, output_dir: str):
+                                       color_palette: dict, save_dataset: bool, output_dir: str):
     """
     Generate (sub)set of bioactivity data for target and options of interest and compute variant activity distribution
     with the option to plot it and report the dataset and statistics
@@ -423,6 +443,8 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 This will save the figure file (.png) and append statistics (.txt) in output_dir
     :param hist: Whether to plot activity distribution as histogram instead of smooth kde distribution curve
     :param plot_mean: Whether to plot variant's mean as a vertical line
+    :param color_palette: (Optional) Dictionary with colors for plotting. If not provided, it will be generated
+                        automatically
     :param save_dataset: Whether to save the (subset) modelling dataset used for computing activity distribution
     :param output_dir: Location for the output files
     :return: None
@@ -441,7 +463,10 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
 
     else:
         # Define color palette and plotting order to ensure consistent colors over different subsets
-        palette = define_consistent_palette(data,accession)
+        if not color_palette == None:
+            palette = color_palette
+        else:
+            palette = define_consistent_palette(data,accession)
 
         # Calculate common subset for plotting (with or without similarity match amplification) and save if specified
         if not sim:
@@ -460,21 +485,24 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 hue_order = [target_id for target_id in palette.keys() if target_id in data_accession['target_id'].unique().tolist()]
                 if not hist: # Plot distribution curve
                     g = sns.displot(data_accession, x='pchembl_value_Mean', hue='target_id', kind='kde', fill=True,
-                                    palette=palette, hue_order=hue_order, height=5, aspect=1.5, warn_singular=False)
+                                    palette=palette, hue_order=hue_order, height=3.5, aspect=1.1, warn_singular=False,
+                                    facet_kws={'despine':False})
                 else: # Plot histograms
                     g = sns.displot(data_accession, x='pchembl_value_Mean', hue='target_id', kde=True,
-                                    palette=palette, hue_order=hue_order, height=5, aspect=1.5, warn_singular=False)
+                                    palette=palette, hue_order=hue_order, height=3.5, aspect=1.1, warn_singular=False,
+                                    facet_kws={'despine':False})
 
                 # Calculate subset variant statistics for reporting (and plotting)
-                data_mean, data_std = calculate_variant_stats(data_accession, accession, diff=False)
-                data_mean_error, data_std_error = calculate_variant_stats(data_accession, accession, diff=True)
+                data_mean, data_std = calculate_variant_stats(data_accession, accession, diff=False, one_on_one=False)
+                data_mean_error, data_std_error = calculate_variant_stats(data_accession, accession, diff=True, one_on_one=False)
+                data_mean_error_strict, data_std_error_strict = calculate_variant_stats(data_accession, accession, diff=True, one_on_one=True)
 
                 # Plot Mean pchembl_value per variant
                 if plot_mean:
                     for i, variant in enumerate(data_accession['target_id'].unique().tolist()):
                         variant_mean = data_mean.loc[data_mean['target_id'] == variant, 'pchembl_value_Mean_Mean'].item()
                         variant_std = data_std.loc[data_std['target_id'] == variant, 'pchembl_value_Mean_Std'].item()
-                        plt.axvline(variant_mean, color=palette[variant])
+                        plt.axvline(variant_mean, color=palette[variant], linestyle=':', alpha=0.8, linewidth=1.0)
 
                 # Add to variant legend: 1) Mean +/- Std pchembl_value 2) number of compounds 3) coverage of compounds in (sub)set
                 if not sim:
@@ -508,11 +536,14 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                     options_legend_tag = f'Full set n={len(data_accession["connectivity"].unique().tolist())}'
 
                 g._legend.set_title(f'{accession} variants\n{options_legend_tag}')
+                sns.move_legend(g, bbox_to_anchor=(0.75, 0.5), loc='center left')
                 plt.xlabel('pChEMBL value (Mean)')
+                plt.xlim(2, 12)
 
                 # Write figure
                 plt.savefig(os.path.join(output_dir,
-                                         f'variant_activity_distribution_{accession}_{options_filename_tag}.png'), dpi=300)
+                                         f'variant_activity_distribution_{accession}_{options_filename_tag}.png'),
+                                         bbox_inches='tight', dpi=300)
                 plt.savefig(os.path.join(output_dir,
                                          f'variant_activity_distribution_{accession}_{options_filename_tag}.svg'))
 
@@ -522,7 +553,8 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 mean_list = [data_mean.loc[data_mean['target_id'] == target_id, 'pchembl_value_Mean_Mean'].item() for target_id in target_id_list]
                 std_list = [data_std.loc[data_std['target_id'] == target_id, 'pchembl_value_Mean_Std'].item() for target_id in target_id_list]
                 mean_error_list = [data_mean_error.loc[data_mean_error['target_id'] == target_id, 'pchembl_value_Mean_Mean'].item() for target_id in target_id_list]
-                std_error_list = [data_std_error.loc[data_std_error['target_id'] == target_id, 'pchembl_value_Mean_Std'].item() for target_id in target_id_list]
+                mean_error_strict_list = [data_mean_error_strict.loc[data_mean_error_strict['target_id'] == target_id, 'pchembl_value_Mean_Mean'].item() for target_id in target_id_list]
+                std_error_strict_list = [data_std_error_strict.loc[data_std_error_strict['target_id'] == target_id, 'pchembl_value_Mean_Std'].item() for target_id in target_id_list]
                 n_accession_list = [len(data_accession['connectivity'].unique().tolist()) for x in target_id_list]
                 n_target_id_list = [sum(data_accession[data_accession["target_id"] == target_id]["pchembl_value_Mean"].notna().tolist()) for target_id in target_id_list]
                 coverage_list = [coverage_dict[target_id][0] for target_id in target_id_list]
@@ -531,7 +563,8 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                              'mean_pchembl':mean_list,
                              'std_pchembl':std_list,
                              'mean_error':mean_error_list,
-                             'std_error':std_error_list,
+                             'mean_error_strict':mean_error_strict_list,
+                             'std_error_strict':std_error_strict_list,
                              'n_accession':n_accession_list,
                              'n_target_id':n_target_id_list,
                              'coverage':coverage_list}
@@ -626,7 +659,268 @@ def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: 
 
     return stat_df_keep
 
+def read_bioactivity_distribution_stats(stats_dir: str, subset_type: str, accession: str):
+    """Read the stats file for the bioactivity distribution of a given target
 
+    :param stats_dir: Directory where the stats files are located
+    :param subset_type: Type of subset used to generate the different stats files. Options: 'butina_clusters',
+                        'common_subsets'
+    :param accession: Accession code of the target
+    :return: pd.DataFrame with the stats for the bioactivity distribution of the target across the different subsets
+    """
+    # Read stats for all possible subtypes
+    df_list = []
+    if subset_type == 'butina_clusters':
+        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/*/*.txt')]
+        for dir in dirs:
+            df = pd.read_csv(dir, sep='\t')
+            subset_tag = dir.split(sep='\\')[-2]
+            df['subset_tag'] = subset_tag
+            df_list.append(df)
+    elif subset_type == 'common_subsets':
+        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/*.txt')]
+        for dir in dirs:
+            df = pd.read_csv(dir, sep='\t')
+            subset_tag = '_'.join(os.path.basename(dir).replace('.txt','').split('_')[2:])
+            df['subset_tag'] = subset_tag
+            df_list.append(df)
+
+    df_full = pd.concat(df_list)
+
+    # Filter for accession of interest
+    df_accession_with_gaps = df_full[df_full['accession'] == accession]
+
+    # Complete dataframe for all subtype and variants available for accession of interest
+    mind = pd.MultiIndex.from_product(
+        [df_accession_with_gaps.target_id.unique().tolist(),df_accession_with_gaps.subset_tag.unique().tolist(),df_accession_with_gaps.accession.unique().tolist()], names=['target_id','subset_tag','accession'])
+    # Fill gaps with zeroes
+    df_accession = df_accession_with_gaps.set_index(['target_id','subset_tag','accession']).reindex(mind, fill_value=0)\
+        .reset_index()
+
+    return df_accession
+
+def scale_bioactivity_distibution_stats(df: pd.DataFrame):
+    """Scale the bioactivity distribution stats to be used in a bubble plot
+
+    :param df: pd.DataFrame with the stats for the bioactivity distribution of the target across the different subsets
+    :return: pd.DataFrame with the scaled stats for the bioactivity distribution of the target across the different subsets
+    """
+    # Differentiate between positive (>WT) and negative (<WT) errors
+    # Use square root to amplify small differences for bubble plot
+    def scale_error(x, error_key):
+        if x[error_key] > 0:
+            sqrt_pos = np.sqrt(x[error_key])
+            sqrt_neg = 0
+        else:
+            sqrt_pos = 0
+            sqrt_neg = np.sqrt(np.abs(x[error_key]))
+        # Multiply by number to get a bubble size that is visible
+        scale = 500
+        return sqrt_pos*scale, sqrt_neg*scale
+
+    df[['mean_error_pos_upscaled','mean_error_neg_upscaled']] = df.apply(scale_error, args=('mean_error',), axis=1,
+                                                                                     result_type='expand')
+    try:
+        df[['mean_error_strict_pos_upscaled','mean_error_strict_neg_upscaled']] = df.apply(scale_error, args=
+        ('mean_error_strict',),axis=1,result_type='expand')
+    except KeyError:
+        print('mean error strict not calculated')
+
+    # Multiply coverage to get a bubble size that is visible
+    df['coverage_upscaled'] = df['coverage']*1000
+
+    return df
+
+def prepare_for_plotting_bioactivity_distribution_stats(df: pd.DataFrame, subset_type: str, accession: str):
+    """Prepare the stats for the bioactivity distribution of the target across the different subsets for plotting
+
+    :param df: pd.DataFrame with the stats for the bioactivity distribution of the target across the different subsets
+    :param subset_type: Type of subset used to generate the different stats files. Options: 'butina_clusters',
+                        'common_subsets'
+    :param accession: Accession code of the target
+    :return: pd.DataFrame with the stats for the bioactivity distribution of the target across the different subsets
+    """
+    # Define a consistent palette for all variants
+    palette_dict = define_consistent_palette(df, accession)
+    # Map variants to their color and order according to target_id
+    df['color'] = df['target_id'].map(palette_dict)
+    df['target_id_cat'] = pd.Categorical(
+        df['target_id'],
+        categories=palette_dict.keys(),
+        ordered=True
+    )
+
+    # Order subset types consistently for plotting
+    if subset_type == 'butina_clusters':
+        # Order clusters 1 > 10 based on the number of cluster
+        def atoi(text):
+           return int(text) if text.isdigit() else text
+        def natural_keys(text):
+            return [ atoi(c) for c in re.split('(\d+)',text) ]
+        subset_order =df['subset_tag'].unique().tolist()
+        subset_order.sort(key=natural_keys)
+    elif subset_type == 'common_subsets':
+        subset_order = ['All', 'Thr2_NoCov', 'Thr2_Cov1', 'Thr2_Cov20'] # Otherwise 'NoCov goes afterwards'
+
+    df['subset_tag_cat'] = pd.Categorical(
+        df['subset_tag'],
+        categories = subset_order,
+        ordered=True,
+    )
+
+    # Make X axis tag pretty
+    df['subset_tag_pretty'] = df['subset_tag'].apply(lambda x: x.replace('_',' ').capitalize())
+
+    # Sort values for consistent plotting
+    df.sort_values(['target_id_cat','subset_tag_cat'], inplace=True, ascending=[False,True])
+
+    return df, subset_order
+
+def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str, accession: str, error_key: str,
+                                               output_dir: str):
+    """Plot the stats for the bioactivity distribution of the target across the different subsets
+
+    :param stats_dir: Directory with the stats for the bioactivity distribution of the target across the different subsets
+    :param subset_type: Type of subset used to generate the different stats files. Options: 'butina_clusters',
+                        'common_subsets'
+    :param accession: Accession of the target
+    :param error_key: Key of the error to plot. Options: 'mean_error', 'mean_error_strict'
+    :param output_dir: Directory to save the plot
+    """
+    # Read stats
+    df_accession = read_bioactivity_distribution_stats(stats_dir, subset_type, accession)
+    # Scale stats for bubble plotting
+    df_accession = scale_bioactivity_distibution_stats(df_accession)
+    # Prepare dataframe for bubble plotting
+    df_accession, subset_order = prepare_for_plotting_bioactivity_distribution_stats(df_accession, subset_type, accession)
+
+    # Figure options
+    if subset_type == 'butina_clusters':
+        fig, ax = plt.subplots(figsize=(17, 7))
+    elif subset_type == 'common_subsets':
+        fig, ax = plt.subplots(figsize=(7, 10))
+    plt.grid(ls="--")
+    ax.set_xlim(-0.5, df_accession.subset_tag.unique().size+1.0)
+
+    # Main bubble plot
+    # Left bubbles: Cummulative error compared to WT (positive and negative separately)
+    plt.scatter(data=df_accession, x='subset_tag_pretty', y='target_id', s=f'{error_key}_pos_upscaled', c='color',
+                edgecolor="black", marker=MarkerStyle("o", fillstyle="left"))
+    plt.scatter(data=df_accession, x='subset_tag_pretty', y='target_id', s=f'{error_key}_neg_upscaled', c='color',
+                edgecolor="white", marker=MarkerStyle("o", fillstyle="left"), alpha=0.5)
+    # Right bubbles: Variant coverage
+    plt.scatter(data=df_accession, x='subset_tag_pretty', y='target_id', s='coverage_upscaled', c='color',
+                edgecolor="black", marker=MarkerStyle("o", fillstyle="right"))
+
+    # Add WT mean_pchembl_value annotations
+    for i,sub in enumerate(subset_order):
+        pchembl_value_WT = round(df_accession[(df_accession['subset_tag'] == sub) & (df_accession['target_id'].str.contains
+        ('WT'))].iloc[0]['mean_pchembl'],2)
+        ax.annotate(pchembl_value_WT, xy=(i-0.1,df_accession.target_id.unique().size-1), ha='right', color='#474747')
+
+    # Color variant labels
+    # for ticklabel,tickcolor in zip(plt.gca().get_yticklabels(),list(palette_dict.values())[::-1]): #TODO: Fix,
+    #  currently expects all variants (which is no always the case for variants). Ideally we would map the ticklabel with
+    #  te dict
+    for ticklabel,tickcolor in zip(plt.gca().get_yticklabels(),df_accession.color.unique().tolist()):
+        ticklabel.set_color(tickcolor) # Color each label
+        # ticklabel.set_backgroundcolor(tickcolor) # Color each label background
+
+    # Add legend
+    legend_x_pos = df_accession.subset_tag.unique().size+0.2
+    if subset_type == 'butina_clusters':
+        legend_y_pos = df_accession.target_id.unique().size-0.5
+        legend_y_pos_step = 0.1*legend_y_pos
+        legend_1_x_pos_steps = [0.5,0.0]
+    elif subset_type == 'common_subsets':
+        legend_y_pos = df_accession.target_id.unique().size
+        legend_y_pos_step = 0.07*legend_y_pos
+        legend_1_x_pos_steps = [0.5,0.2]
+
+    # Legend 1: type of error respect to WT (positive or negative)
+    # Sublegend title
+    ax.annotate('Mean pchembl_value error\ncompared to WT', xy=(legend_x_pos-0.2, legend_y_pos-legend_y_pos_step*1.7),
+                    ha="center", va="center",
+                    fontsize="small", fontweight="bold", color="black")
+    # Left legend bubble and annotation
+    ax.scatter(legend_x_pos-legend_1_x_pos_steps[0],
+               legend_y_pos-legend_y_pos_step*3,
+               s=1000,
+               c='grey',
+                edgecolor="black", marker=MarkerStyle("o", fillstyle="left"))
+    ax.annotate('Positive\nerror', xy=(legend_x_pos-legend_1_x_pos_steps[0], legend_y_pos-legend_y_pos_step*2.3),
+                    ha="center", va="center",
+                    fontsize="small", fontweight="regular", color="black")
+    # Right legend bubble and annotation
+    ax.scatter(legend_x_pos+legend_1_x_pos_steps[1],
+               legend_y_pos-legend_y_pos_step*3,
+               s=1000,
+               c='grey',
+                edgecolor="white", alpha=0.5, marker=MarkerStyle("o", fillstyle="left"))
+    ax.annotate('Negative\nerror', xy=(legend_x_pos+legend_1_x_pos_steps[1], legend_y_pos-legend_y_pos_step*2.3),
+                    ha="center", va="center",
+                    fontsize="small", fontweight="regular", color="black")
+
+    # Legend 2: size of bubbles
+    bubbles_n=10
+    # Legend 2.1: size of left bubbles (error wrt WT)
+    # Min, max, and step size
+    bubbles_error_min = df_accession[error_key].abs().min()
+    bubbles_error_min_scaled = min(df_accession[f'{error_key}_pos_upscaled'].abs().min(),
+                                   df_accession[f'{error_key}_neg_upscaled'].abs().min())
+    bubbles_error_max = df_accession[error_key].abs().max()
+    bubbles_error_max_scaled = max(df_accession[f'{error_key}_pos_upscaled'].abs().max(),
+                                   df_accession[f'{error_key}_neg_upscaled'].abs().max())
+    bubbles_error_step = (bubbles_error_max-bubbles_error_min)/(bubbles_n-1)
+    bubbles_error_step_scaled = (bubbles_error_max_scaled-bubbles_error_min_scaled)//(bubbles_n-1)
+
+    # Sublegend title
+    ax.annotate('Absolute\nerror', xy=(legend_x_pos-0.4, legend_y_pos-legend_y_pos_step*4.2),
+                    ha="right", va="center",
+                    fontsize="small", fontweight="bold", color="black")
+    # Legend bubbles
+    for i, bubbles_y in enumerate(np.linspace(legend_y_pos-legend_y_pos_step*bubbles_n, legend_y_pos-legend_y_pos_step*5, bubbles_n)):
+        #plot each legend bubble to indicate different marker sizes
+        ax.scatter(legend_x_pos-0.4,
+                   bubbles_y,
+                   s=(bubbles_error_min_scaled + i*bubbles_error_step_scaled),
+                   c='grey', alpha=0.5, edgecolor="grey", marker=MarkerStyle("o", fillstyle="left"))
+        #and label it with a value
+        if i > 0:
+            ax.annotate(round((bubbles_error_min+i*bubbles_error_step),2), xy=(legend_x_pos-0.6, bubbles_y),
+                        ha="right", va="center",
+                        fontsize="small", fontweight="regular", color="black")
+
+
+    # Legend 2.2: size of right bubbles (variant coverage %)
+    # Min, max, and step size
+    bubbles_coverage_min = df_accession.coverage_upscaled.min()
+    bubbles_coverage_max = df_accession.coverage_upscaled.max()
+    bubbles_coverage_step = (bubbles_coverage_max - bubbles_coverage_min)//(bubbles_n-1)
+
+    # Sublegend title
+    ax.annotate('Variant\ncoverage', xy=(legend_x_pos-0.15, legend_y_pos-legend_y_pos_step*4.2),
+                    ha="left", va="center",
+                    fontsize="small", fontweight="bold", color="black")
+    # Legend bubbles
+    for i, bubbles_y in enumerate(np.linspace(legend_y_pos-legend_y_pos_step*bubbles_n, legend_y_pos-legend_y_pos_step*5, bubbles_n)):
+        #plot each legend bubble to indicate different marker sizes
+        ax.scatter(legend_x_pos-0.15,
+                   bubbles_y,
+                   s=(bubbles_coverage_min + i*bubbles_coverage_step),
+                   c='grey', alpha=0.5, edgecolor="grey", marker=MarkerStyle("o", fillstyle="right"))
+        #and label it with a value
+        if i > 0:
+            ax.annotate(('{:.0%}'.format((bubbles_coverage_min+i*bubbles_coverage_step)/1000)), xy=(legend_x_pos+0.1,
+                                                                                                    bubbles_y),
+                        ha="left", va="center",
+                        fontsize="small", fontweight="regular", color="black")
+
+    # Save plot
+    plt.savefig(os.path.join(output_dir, f'bubbleplot_bioactivity_distribution_stats_{accession}_{subset_type}_'
+                                       f'{error_key}.png'),dpi=300)
+    plt.savefig(os.path.join(output_dir, f'bubbleplot_bioactivity_distribution_stats_{accession}_{subset_type}_'
+                                       f'{error_key}.svg'))
 
 if __name__ == '__main__':
     pd.options.display.width = 0
@@ -648,15 +942,16 @@ if __name__ == '__main__':
         # Full dataset
         compute_variant_activity_distribution(data_with_mutants, accession, common=False, sim=False, sim_thres=None,
                                               threshold=None, variant_coverage=None, plot=True, hist=False, plot_mean=True,
-                                              save_dataset=False,output_dir=os.path.join(output_dir, 'all'))
+                                              color_palette=None,save_dataset=False,output_dir=os.path.join(output_dir,
+                                                                                                       'all'))
         # Strict common subset with > 20% coverage
         compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=False, sim_thres=None,
                                            threshold=2,variant_coverage=0.2, plot=True, hist=False, plot_mean=True,
-                                           save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20'))
+                                           color_palette=None,save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20'))
         # Common subset with > 20% coverage including similar compounds (>80% Tanimoto) tested in other variants
         compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=True, sim_thres=0.8,
                                            threshold=2,variant_coverage=0.2, plot=True, hist=False, plot_mean=True,
-                                           save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
+                                           color_palette=None,save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
 
     # Extract relevant targets for reporting and modelling (using common subset with similarity)
     # A) Check which targets have the biggest common subsets
@@ -681,15 +976,15 @@ if __name__ == '__main__':
         # Full dataset
         compute_variant_activity_distribution(data_with_mutants, accession, common=False, sim=False, sim_thres=None,
                                               threshold=None, variant_coverage=None, plot=False, hist=False, plot_mean=True,
-                                              save_dataset=True,output_dir=os.path.join(output_dir, 'all'))
+                                              color_palette=None,save_dataset=True,output_dir=os.path.join(output_dir, 'all'))
         # Strict common subset with > 20% coverage
         compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=False, sim_thres=None,
                                            threshold=2,variant_coverage=0.2, plot=False, hist=False, plot_mean=True,
-                                           save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20'))
+                                           color_palette=None,save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20'))
         # Common subset with > 20% coverage including similar compounds (>80% Tanimoto) tested in other variants
         compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=True, sim_thres=0.8,
                                            threshold=2,variant_coverage=0.2, plot=False, hist=False, plot_mean=True,
-                                           save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
+                                           color_palette=None,save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
 
 
 
