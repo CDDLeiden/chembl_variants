@@ -760,7 +760,8 @@ def prepare_for_plotting_bioactivity_distribution_stats(df: pd.DataFrame, subset
         subset_order =df['subset_tag'].unique().tolist()
         subset_order.sort(key=natural_keys)
     elif subset_type == 'common_subsets':
-        subset_order = ['All', 'Thr2_NoCov', 'Thr2_Cov1', 'Thr2_Cov20'] # Otherwise 'NoCov goes afterwards'
+        subset_order = ['All', 'Thr2_NoCov', 'Thr2_Cov1', 'Thr2_Cov20', 'Thr2_Cov20_Sim80'] # Otherwise 'NoCov goes
+        # afterwards'
 
     df['subset_tag_cat'] = pd.Categorical(
         df['subset_tag'],
