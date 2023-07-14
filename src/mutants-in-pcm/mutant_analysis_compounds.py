@@ -72,8 +72,8 @@ def visualize_molecular_subset_highlights(accession: str, accession_data: pd.Dat
     :param accession_data: dataframe with bioactivity data for the target of interest 
     :param subset: list of compounds in the form of connectivities 
     :param subset_alias: alias to identify the subset of interest in the output file
-    :param match_type: type of substructure to highlight. Options include: 'Murcko' (highlight most common Murcko 
-    scaffold across the subset), 'ring' (highlight biggest ring system in each molecule), 'MCS' (highlight maximum 
+    :param match_type: type of substructure to highlight. Options include: 'Murcko' (highlight  Murcko 
+    scaffold), 'ring' (highlight biggest ring system in each molecule), 'MCS' (highlight maximum 
     common substructure accross the subset), 'SMILES' (highlight an exact match of a SMILES pattern defined in 
     substructure_to_match), 'SMARTS' (highlight a match for a SMARTS pattern defined in substructure_to_match)
     :param substructure_to_match: dictionary with the SMILES or SMARTS pattern to match for the accession of interest
@@ -92,17 +92,8 @@ def visualize_molecular_subset_highlights(accession: str, accession_data: pd.Dat
     mMols = subset_df['Molecule'].tolist()
 
     if match_type == 'Murcko':
-    # Calculate Murcko Scaffold Hashes
-        murckoHashList = [rdMolHash.MolHash(mMol, rdkit.Chem.rdMolHash.HashFunction.MurckoScaffold) for mMol in mMols]
-
-        # Get the most frequent Murcko Scaffold Hash
-        def mostFreq(list):
-            return max(set(list), key=list.count)
-        mostFreq_murckoHash = mostFreq(murckoHashList)
-
-        # Display molecules with MurkoHash as legends and highlight the mostFreq_murckoHash
-        mostFreq_murckoHash_mol = Chem.MolFromSmiles(mostFreq_murckoHash)
-        highlight_match = [mMol.GetSubstructMatch(mostFreq_murckoHash_mol) for mMol in mMols]
+        murckoList = [Chem.Scaffolds.MurckoScaffold.GetScaffoldForMol(mMol) for mMol in mMols]
+        highlight_match = [mMol.GetSubstructMatch(murcko) for mMol, murcko in zip(mMols, murckoList)]
 
     elif match_type == 'MCS':
         mcs = rdFMCS.FindMCS(mMols)
