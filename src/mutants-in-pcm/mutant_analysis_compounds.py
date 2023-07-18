@@ -222,6 +222,29 @@ def butina_cluster_compounds(accession: str, accession_data: pd.DataFrame, subse
 
     return clusters,compounds, connectivity_cluster_dict
 
+def get_clustering_stats(accession: str, output_dir: str, subset_alias:str, cutoff: float = 0.2):
+    """
+    Get statistics for clustering of compounds with Butina algorithm from the output json file.
+    :param accession: target Uniprot accession code
+    :param subset_alias: alias to identify the subset of interest in the output file
+    :param output_dir: path to output directory
+    :param cutoff: distance cutoff to the cluster central molecule for molecule inclusion in cluster
+    """
+    with open(os.path.join(output_dir,f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.json')) as in_file:
+        connectivity_cluster_dict = json.load(in_file)
+
+    # Get cluster sizes
+    clusters = sorted(list(set(connectivity_cluster_dict.values())))
+
+    cluster_sizes = [len([k for k, v in connectivity_cluster_dict.items() if v == cluster]) for cluster in clusters]
+    print(f'Number of clusters: {len(clusters)}')
+    print(f'Number of compounds in clusters: {sum(cluster_sizes)}')
+
+    print(f'Number of compounds per cluster:')
+    for c,s in zip(clusters,cluster_sizes):
+        print(f'Cluster {c}: {s} compounds')
+
+
 def plot_bioactivity_distribution_cluster_subset(accession: str, output_dir: str):
     """
     Plot bioactivity distribution of compounds in clusters of the common subset. In this case,
@@ -281,7 +304,16 @@ if __name__ == '__main__':
     output_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
              'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\4_compound_clusters'
 
-    # Plot distributions of bioactivities in most populated Butina clusters for targets with > 90 compounds
+    # Plot distributions of bioactivities in most populated Butina clusters for targets with > 90 compounds in common
+    # subsets
     for accession in ['P00533', 'Q72547', 'O75874','O60885','P00519','P07949','P10721','P13922','P15056','P22607',
     'P30613','P36888','Q15910','Q5S007','Q9UM73']:
+        plot_bioactivity_distribution_cluster_subset(accession, output_dir)
+
+    # Plot distribution of bioactivities in most populated Butina clusters for targets with => 50% mutant bioactivity
+    # ratio
+    for accession in ['P15056', 'P23443', 'O75874', 'P13922', 'P30613', 'P01116', 'Q6P988', 'Q86WV6', 'P48735',
+                      'Q9P2K8', 'P21146', 'P48065', 'Q81R22', 'P07753', 'Q62120', 'Q15022', 'C1KIQ2', 'P36873',
+                      'Q5NGQ3', 'Q9QUR6', 'D5F1R0', 'P02511', 'P11678', 'P0DOF9', 'P56690', 'Q05320', 'P13738',
+                      'Q9NZN5', 'P15682', 'Q9NPD8']:
         plot_bioactivity_distribution_cluster_subset(accession, output_dir)
