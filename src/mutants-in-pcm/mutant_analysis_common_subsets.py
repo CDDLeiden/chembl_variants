@@ -778,7 +778,7 @@ def prepare_for_plotting_bioactivity_distribution_stats(df: pd.DataFrame, subset
     return df, subset_order
 
 def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str, accession: str, error_key: str,
-                                               output_dir: str):
+                                               output_dir: str, manuscript_quality: bool = False):
     """Plot the stats for the bioactivity distribution of the target across the different subsets
 
     :param stats_dir: Directory with the stats for the bioactivity distribution of the target across the different subsets
@@ -797,7 +797,10 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
 
     # Figure options
     if subset_type == 'butina_clusters':
-        fig, ax = plt.subplots(figsize=(17, 7))
+        if not manuscript_quality:
+            fig, ax = plt.subplots(figsize=(17, 7))
+        else:
+            fig, ax = plt.subplots(figsize=(11, 5))
     elif subset_type == 'common_subsets':
         fig, ax = plt.subplots(figsize=(7, 10))
     plt.grid(ls="--")
@@ -819,20 +822,34 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
         ('WT'))].iloc[0]['mean_pchembl'],2)
         ax.annotate(pchembl_value_WT, xy=(i-0.1,df_accession.target_id.unique().size-1), ha='right', color='#474747')
 
-    # Color variant labels
-    # for ticklabel,tickcolor in zip(plt.gca().get_yticklabels(),list(palette_dict.values())[::-1]): #TODO: Fix,
-    #  currently expects all variants (which is no always the case for variants). Ideally we would map the ticklabel with
-    #  te dict
-    for ticklabel,tickcolor in zip(plt.gca().get_yticklabels(),df_accession.color.unique().tolist()):
-        ticklabel.set_color(tickcolor) # Color each label
-        # ticklabel.set_backgroundcolor(tickcolor) # Color each label background
+    if not manuscript_quality:
+        # Color variant labels
+        # for ticklabel,tickcolor in zip(plt.gca().get_yticklabels(),list(palette_dict.values())[::-1]): #TODO: Fix,
+        #  currently expects all variants (which is no always the case for variants). Ideally we would map the ticklabel with
+        #  te dict
+        for ticklabel,tickcolor in zip(plt.gca().get_yticklabels(),df_accession.color.unique().tolist()):
+            ticklabel.set_color(tickcolor) # Color each label
+            # ticklabel.set_backgroundcolor(tickcolor) # Color each label background
+    else:
+        # Remove accession from variant labels and make them black
+        plt.draw()
+        ls = [label.get_text() for label in ax.get_yticklabels()]
+        ax.set_yticklabels([' '.join(label.split('_')[1:]) for label in ls])
 
     # Add legend
-    legend_x_pos = df_accession.subset_tag.unique().size+0.2
+    if not manuscript_quality:
+        legend_x_pos = df_accession.subset_tag.unique().size+0.2
+    else:
+        legend_x_pos = df_accession.subset_tag.unique().size+0.3
     if subset_type == 'butina_clusters':
-        legend_y_pos = df_accession.target_id.unique().size-0.5
-        legend_y_pos_step = 0.1*legend_y_pos
-        legend_1_x_pos_steps = [0.5,0.0]
+        if not manuscript_quality:
+            legend_y_pos = df_accession.target_id.unique().size-0.5
+            legend_y_pos_step = 0.1*legend_y_pos
+            legend_1_x_pos_steps = [0.5,0.0]
+        else:
+            legend_y_pos = df_accession.target_id.unique().size - 0.2
+            legend_y_pos_step = 0.1 * legend_y_pos
+            legend_1_x_pos_steps = [0.6, 0.0]
     elif subset_type == 'common_subsets':
         legend_y_pos = df_accession.target_id.unique().size
         legend_y_pos_step = 0.07*legend_y_pos
@@ -840,7 +857,11 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
 
     # Legend 1: type of error respect to WT (positive or negative)
     # Sublegend title
-    ax.annotate('Mean pchembl_value error\ncompared to WT', xy=(legend_x_pos-0.2, legend_y_pos-legend_y_pos_step*1.7),
+    if not manuscript_quality:
+        legend_1_title = 'Mean pchembl_value error\ncompared to WT'
+    else:
+        legend_1_title = 'Mean pchembl_value\nerror (vs. WT)'
+    ax.annotate(legend_1_title, xy=(legend_x_pos-0.2, legend_y_pos-legend_y_pos_step*1.7),
                     ha="center", va="center",
                     fontsize="small", fontweight="bold", color="black")
     # Left legend bubble and annotation
@@ -918,10 +939,14 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
                         fontsize="small", fontweight="regular", color="black")
 
     # Save plot
-    plt.savefig(os.path.join(output_dir, f'bubbleplot_bioactivity_distribution_stats_{accession}_{subset_type}_'
-                                       f'{error_key}.png'),dpi=300)
-    plt.savefig(os.path.join(output_dir, f'bubbleplot_bioactivity_distribution_stats_{accession}_{subset_type}_'
-                                       f'{error_key}.svg'))
+    if not manuscript_quality:
+        plt.savefig(os.path.join(output_dir, f'bubbleplot_bioactivity_distribution_stats_{accession}_{subset_type}_'
+                                           f'{error_key}.png'),dpi=300)
+        plt.savefig(os.path.join(output_dir, f'bubbleplot_bioactivity_distribution_stats_{accession}_{subset_type}_'
+                                           f'{error_key}.svg'))
+    else:
+        plt.savefig(os.path.join(output_dir, f'bubbleplot_bioactivity_distribution_stats_{accession}_{subset_type}_'
+                                             f'{error_key}_MS.svg'))
 
 if __name__ == '__main__':
     pd.options.display.width = 0
