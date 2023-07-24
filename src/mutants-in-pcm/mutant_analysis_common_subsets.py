@@ -402,6 +402,40 @@ def calculate_variant_stats(data_accession: pd.DataFrame, accession: str, diff: 
 
     return data_mean,data_std
 
+def order_variants(variant_list: list):
+    """
+    Order variants by position in the protein sequence (ascending) for the first, second, third [...] mutations
+    respectively. If there are several mutations in the same position, order them by alphabetical order of the amino
+    acid substitution (ascending). If WT is in the set, it is always the first in the list.
+    :param variant_list: list of variants to be ordered
+    :return: list of sorted variants
+    """
+    # Get the maximum amount of mutations in one variant
+    max_variant_length = max([len(x.split('_')) for x in variant_list])
+
+    # Split variants into mutations and separate them by position and substituted amino acid
+    variants_dict = {}
+    for variant in variant_list:
+        mutations = []
+        for mutation_n in range(1, max_variant_length):
+            try:
+                mutations.append(variant.split('_')[mutation_n][1:-1])
+                mutations.append(variant.split('_')[mutation_n][-1])
+            except IndexError:
+                mutations.append('')
+                mutations.append('')
+        variants_dict[variant] = mutations
+
+    # Make df with two columns for each mutation (position and substituted amino acid) and sort by them starting by
+    # the first mutation
+    column_names = [str(n) for n in range(1, max_variant_length * 2 - 1)]
+    variants_df_sorted = pd.DataFrame.from_dict(variants_dict, orient='index', columns=column_names).sort_values \
+        (by=column_names)
+
+    # Extract sorted mutations
+    variants_sorted = variants_df_sorted.index.tolist()
+    return variants_sorted
+
 def define_consistent_palette(data: pd.DataFrame, accession: str):
     """
     Define palette for plotting that is consistent for the same data and accession
@@ -413,7 +447,7 @@ def define_consistent_palette(data: pd.DataFrame, accession: str):
     list_variants = [target_id for target_id in data[data['accession'] == accession]['target_id'].unique().tolist() if not 'WT' in target_id]
     list_colors = sns.color_palette("Spectral", n_colors=len(list_variants)).as_hex()
     try:
-        list_variants_sorted = sorted(list_variants, key=lambda x: int(x.split('_')[1][1:-1]))
+        list_variants_sorted = order_variants(list_variants)
     except ValueError:
         list_variants_sorted = list_variants
     list_colors_accession = list_colors[0:len(list_variants_sorted)+1]
