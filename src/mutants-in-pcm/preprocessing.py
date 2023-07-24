@@ -200,6 +200,9 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
         # Get Papyrus data with annotated mutants
         papyrus_with_mutants = obtain_papyrus_data(papyrus_version, papyrus_flavor, chunksize)
         papyrus_with_mutants['source'] = papyrus_with_mutants['source'].apply(lambda x: f'Papyrus{papyrus_version}_{x}')
+        # Make sure that all mutations in a variant are ordered by position
+        papyrus_with_mutants['target_id'] = papyrus_with_mutants['target_id'].apply(
+            lambda x: f"{x.split('_')[0]}_{'_'.join(sorted(x.split('_')[1:]))}")
         # Add sequence data from protein data file
         sequences = papyrus_scripts.read_protein_set(version=papyrus_version)[['target_id', 'Sequence']].rename(
             {'Sequence': 'sequence'}, axis=1)
