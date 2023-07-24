@@ -281,7 +281,7 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, output_dir: str
                                      'full_set', os.path.join(output_dir, accession), 0.5)
 
     # Define consistent color palette that includes all variants
-    palette_dict = define_consistent_palette(accession_data, accession)
+    palette_dict = define_consistent_palette(accession_data_common, accession)
 
     # Plot bioactivity distribution for 10 largest clusters
     for i in range(1, 11):
