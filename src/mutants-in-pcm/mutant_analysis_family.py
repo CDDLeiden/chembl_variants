@@ -125,9 +125,9 @@ def plot_circular_barplot_families(annotated_data_families: pd.DataFrame, family
 
     # Define options for making figure a panel (bigger font size)
     if figure_panel:
-        label_size = 18
-        medium_label_size = 14
-        small_label_size = 12
+        label_size = 22
+        medium_label_size = 18
+        small_label_size = 16
         label_pad = -60
         cbar_x, cbar_y, cbar_w, cbar_h = 0.175, 0.1, 0.70, 0.02
         figure_tag = file_tag + '_panel'
@@ -173,7 +173,8 @@ def plot_circular_barplot_families(annotated_data_families: pd.DataFrame, family
     GREY12 = "#1f1f1f"
 
     # Set default font to Bell MT
-    plt.rcParams.update({"font.family": "Bell MT"})
+    if not figure_panel:
+        plt.rcParams.update({"font.family": "Bell MT"})
 
     # Set default font color to GREY12
     plt.rcParams["text.color"] = GREY12
@@ -353,9 +354,9 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
 
     # Define options for making figure a panel (bigger font size)
     if figure_panel:
-        label_size = 18
-        medium_label_size = 14
-        small_label_size = 12
+        label_size = 22
+        medium_label_size = 18
+        small_label_size = 16
         label_pad = -60
         cbar_x, cbar_y, cbar_w, cbar_h = 0.175, 0.1, 0.70, 0.02
         figure_tag = file_tag + '_panel'
@@ -404,7 +405,8 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
     GREY12 = "#1f1f1f"
 
     # Set default font to Bell MT
-    plt.rcParams.update({"font.family": "Bell MT"})
+    if not figure_panel:
+        plt.rcParams.update({"font.family": "Bell MT"})
 
     # Set default font color to GREY12
     plt.rcParams["text.color"] = GREY12
