@@ -193,20 +193,37 @@ def get_statistics_across_variants(chembl_version: str, papyrus_version: str, pa
 
     return stats_variant
 
-def filter_statistics(stats: pd.DataFrame, min_data: int, min_percentage: float, min_variants: float, sort_output_by:
-    str):
+def filter_statistics(stats: pd.DataFrame, min_data: int, max_data: int,
+                      min_percentage: float, max_perccentage: float,
+                      min_variants: int, max_variants: int,
+                      sort_output_by:str):
     """
     Filter statistics dataframe to include only accessions with a minimum number of mutants and minimum percentage of
     mutants.
     :param stats: dataframe with statistics
     :param min_data: minimum number of bioactivity data points
+    :param max_data: maximum number of bioactivity data points
     :param min_percentage: minimum percentage of mutants
+    :param max_perccentage: maximum percentage of mutants
     :param min_variants: minimum number of variants
+    :param max_variants: maximum number of variants
     :return: filtered dataframe
     """
+    # Select maximum values if no maximum is provided
+    if max_data is None:
+        max_data = stats['connectivity'].max()
+    if max_variants is None:
+        max_variants = stats['target_id'].max()
+    if max_perccentage is None:
+        max_perccentage = stats['connectivity_mutant_percentage'].max()
+
+    # Filter data
     filtered_stats = stats[(stats['connectivity'] >= min_data) &
+                             (stats['connectivity'] <= max_data) &
                              (stats['target_id'] >= min_variants) &
+                            (stats['target_id'] <= max_variants) &
                            (stats['connectivity_mutant_percentage'] >=  min_percentage)
+                             & (stats['connectivity_mutant_percentage'] <= max_perccentage)
                            & (stats['connectivity_mutant_percentage'] != 100.0)]
 
     # Sort output
