@@ -264,8 +264,6 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
         stats_heatmap = stats.pivot(columns='mut_aa',index='wt_aa',values='distance_matrix')
         cbar_label = 'Epstein coefficient of difference'
 
-    stats_heatmap.fillna(0,inplace=True)
-
     # Plot heatmap
     plt.figure(1,figsize=(5.5,5))
     ax = sns.heatmap(data=stats_heatmap, annot=False, cmap='rocket_r', cbar_kws={'label': cbar_label})
@@ -275,6 +273,7 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
 
     # Save heatmap
     plt.savefig(os.path.join(output_dir,f'heatmap_{counts}{subset_flag}.png'),dpi=300)
+    plt.close()
 
 def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direction: bool = True, counts: str = 'activity',
                                     color: str = 'mutation_type', subset_col: str = None, subset_value: str = None,
@@ -639,7 +638,8 @@ if __name__ == "__main__":
 
     # Plot bubble plots with correlation between amino acid differences and distance to ligand COG
     dist_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
-             'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\1_common_subset'
+               'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\0_mutant_statistics\\3_mutation_type' \
+               '\\mutation_distances'
     for i,accession_list in enumerate([['P00533'],['P00519'],['Q72547']]):
         plot_bubble_aachange_distance(data, accession_list, accession_list[0], dist_dir, output_dir, True)
 
