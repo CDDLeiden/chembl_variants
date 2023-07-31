@@ -22,7 +22,7 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
 
     :param chembl_version: version of chembl to work with
     :param chunksize: size of chunks of data to be used (default: None)
-    param data_folder: path to the folder in which the ChEMBL
+    :param data_folder: path to the folder in which the ChEMBL
     SQLite database is located or will be downloaded (default:
     pystow's default directory)
     """
@@ -166,23 +166,29 @@ def _chunked_keep_papyrus_mutants(data: Union[PandasTextFileReader, Iterator], s
         yield _keep_targets_with_mutants(chunk,source)
 
 
-def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int, predefined_variants: bool = False):
+def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int,
+                                   annotation_round:int, predefined_variants: bool = False):
     """
     Combine datasets with ChEMBL and Papyrus mutants. Include also WT data for targets with at least one variant defined.
     Filter out only targets with no variants defined.
-    :param chembl_mutants:
-    :param papyrus_mutants:
-    :return:
+    :param chembl_version: ChEMBL version
+    :param papyrus_version: Papyrus version
+    :param papyrus_flavor: Papyrus flavor (nostereo_pp, nostereo, stereo)
+    :param chunksize: number of rows to read at a time
+    :param annotation_round: round of annotation following further curation
+    :param predefined_variants: whether to use ChEMBL pre-defined variants
     """
     if predefined_variants:
-        file_name = f'../../data/chembl{chembl_version}_papyrus{papyrus_version}{papyrus_flavor}_data_with_mutants.csv'
+        file_name = f'../../data/chembl{chembl_version}_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv'
     else:
-        file_name = f'../../data/chembl{chembl_version}-annotated_papyrus{papyrus_version}{papyrus_flavor}_data_with_mutants.csv'
+        file_name = f'../../data/chembl{chembl_version}-annotated_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv'
 
     if not os.path.exists(file_name):
         from annotation import chembl_annotation
         # Get ChEMBL data and extract mutants
-        chembl_annotated = chembl_annotation(chembl_version)
+        chembl_annotated = chembl_annotation(chembl_version, annotation_round)
         chembl_annotated['source'] = f'ChEMBL{chembl_version}'
         chembl_with_mutants = _keep_targets_with_mutants(chembl_annotated, f'ChEMBL{chembl_version}', predefined_variants)
         # Rename columns so they match Papyrus
@@ -268,25 +274,27 @@ def calculate_mean_activity_chembl_papyrus(data: pd.DataFrame):
     return agg_activity_data
 
 def merge_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int,
-                                 predefined_variants: bool = False):
+                                 annotation_round: int,predefined_variants: bool = False):
     """
     Create a dataset with targets with at least one annotated variant from ChEMBL and Papyrus. Merge datasets for
     connectivity-target_id pairs if data available from both sources.
-    :param chembl_version:
-    :param papyrus_version:
-    :param papyrus_flavor:
-    :param chunksize:
-    :param predefined_variants:
-    :return:
+    :param chembl_version: ChEMBL version
+    :param papyrus_version: Papyrus version
+    :param papyrus_flavor: Papyrus flavor (nostereo_pp, nostereo, stereo)
+    :param chunksize: number of rows to read at a time
+    :param annotation_round: round of annotation following further curation
+    :param predefined_variants: whether to use ChEMBL pre-defined variants
     """
     if predefined_variants:
-        file_name = f'../../data/merged_chembl{chembl_version}_papyrus{papyrus_version}{papyrus_flavor}_data_with_mutants.csv'
+        file_name = f'../../data/merged_chembl{chembl_version}_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv'
     else:
-        file_name = f'../../data/merged_chembl{chembl_version}-annotated_papyrus{papyrus_version}{papyrus_flavor}_data_with_mutants.csv'
+        file_name = f'../../data/merged_chembl{chembl_version}-annotated_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv'
 
     if not os.path.exists(file_name):
         chembl_papyrus_with_mutants = combine_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor,
-                                                                     chunksize, predefined_variants)
+                                                                     chunksize, annotation_round, predefined_variants)
 
         agg_activity_data_not_annotated = calculate_mean_activity_chembl_papyrus(chembl_papyrus_with_mutants)
 
@@ -301,4 +309,4 @@ def merge_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papy
     return agg_activity_data
 
 if __name__ == "__main__":
-    merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
+    merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round=1, predefined_variants=False)
