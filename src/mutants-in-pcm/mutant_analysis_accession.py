@@ -109,7 +109,7 @@ def double_density_pchembl_year(accession_data, subset, output_dir, accession, s
     plt.savefig(os.path.join(output_dir, f'scatterplot_year_pchembl_{accession}_{subset_name}.svg'))
 
 def get_statistics_across_accessions(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int,
-                                     output_dir: str, save: bool = False):
+                                     annotation_round:int, output_dir: str, save: bool = False):
     """
     Compute statistics for all accessions in the dataset.
     :param chembl_version: version of ChEMBL
@@ -121,7 +121,7 @@ def get_statistics_across_accessions(chembl_version: str, papyrus_version: str, 
     :return: pd.DataFrame with statistics. Each row is one protein (accession)
     """
     # Read mutant annotated ChEMBL + Papyrus data
-    data = merge_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor, chunksize)
+    data = merge_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor, chunksize, annotation_round)
 
     # Extract Organism and gene names
     data_organism = data.drop_duplicates(subset=['accession'])[['accession', 'Organism', 'HGNC_symbol']]
@@ -147,12 +147,13 @@ def get_statistics_across_accessions(chembl_version: str, papyrus_version: str, 
 
     # Save results
     if save:
-        stats_family_tax.to_csv(os.path.join(output_dir, 'stats_per_accession.txt'), sep='\t', index=False)
+        stats_family_tax.to_csv(os.path.join(output_dir, f'stats_per_accession_round{annotation_round}.txt'), sep='\t',
+                                index=False)
 
     return stats_family_tax
 
 def get_statistics_across_variants(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int,
-                                      output_dir: str, save: bool = False):
+                                   annotation_round:int, output_dir: str, save: bool = False):
     """
     Compute statistics for all variants in the dataset.
     :param chembl_version: version of ChEMBL
@@ -164,10 +165,11 @@ def get_statistics_across_variants(chembl_version: str, papyrus_version: str, pa
     :return: pd.DataFrame with statistics. Each row is one variant (target_id)
     """
     # Read mutant annotated ChEMBL + Papyrus data
-    data = merge_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor, chunksize)
+    data = merge_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor, chunksize, annotation_round)
 
     # Calculate statistics per accession
-    stats = get_statistics_across_accessions(chembl_version, papyrus_version, papyrus_flavor, chunksize, output_dir)
+    stats = get_statistics_across_accessions(chembl_version, papyrus_version, papyrus_flavor, chunksize,
+                                             annotation_round, output_dir)
 
     # Compute number of activity datapoints per variant
     stats_variant_activity = data.groupby(['accession', 'target_id'])['connectivity'].count().reset_index().rename \
@@ -189,7 +191,8 @@ def get_statistics_across_variants(chembl_version: str, papyrus_version: str, pa
 
     # Save results
     if save:
-        stats_variant.to_csv(os.path.join(output_dir, 'stats_per_variant.txt'), sep='\t', index=False)
+        stats_variant.to_csv(os.path.join(output_dir, f'stats_per_variant_round{annotation_round}.txt'), sep='\t',
+                             index=False)
 
     return stats_variant
 
@@ -497,7 +500,8 @@ if __name__ == '__main__':
     accession = 'P00533' # (EGFR)
 
     # Read annotated bioactivity data for the accession of interest
-    accession_data = filter_accession_data(merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000), accession)
+    accession_data = filter_accession_data(merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000,
+                                                                        annotation_round=1),accession)
 
     # Read Papyrus data only, for comparison
     papyrus_accession_data = filter_explore_activity_data('05.5', [accession])
