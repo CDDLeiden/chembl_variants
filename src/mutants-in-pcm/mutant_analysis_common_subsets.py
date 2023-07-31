@@ -1050,7 +1050,7 @@ if __name__ == '__main__':
                  'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\0_mutant_statistics\\1_common_subset'
 
     # Get data with mutants
-    data_with_mutants = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
+    data_with_mutants = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round=1)
 
     # Compute quick statistics from data with mutants to check which targets might be of interest
     stats = compute_stats_per_accession(data_with_mutants)
@@ -1059,58 +1059,58 @@ if __name__ == '__main__':
     stats_a2a = stats[stats['accession'] == 'P29274']
 
     # Compute variant activity distribution and plot results for full set and common subsets for all targets
-    for accession in ['P15056','O60674','Q86WV6','P00520']:#stats['accession'].tolist():
+    for accession in stats['accession'].tolist():
         # Full dataset
         compute_variant_activity_distribution(data_with_mutants, accession, common=False, sim=False, sim_thres=None,
                                               threshold=None, variant_coverage=None, plot=True, hist=False, plot_mean=True,
                                               color_palette=None,save_dataset=False,output_dir=os.path.join(output_dir,
-                                                                                                       'all_new'))
-        # # Strict common subset with > 20% coverage
-        # compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=False, sim_thres=None,
-        #                                    threshold=2,variant_coverage=0.2, plot=True, hist=False, plot_mean=True,
-        #                                    color_palette=None,save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20'))
-        # # Common subset with > 20% coverage including similar compounds (>80% Tanimoto) tested in other variants
-        # compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=True, sim_thres=0.8,
-        #                                    threshold=2,variant_coverage=0.2, plot=True, hist=False, plot_mean=True,
-        #                                    color_palette=None,save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
-        # # Strictly common subset (threshold=None)
-        # compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=False, sim_thres=None,
-        #                                      threshold=None,variant_coverage=None, plot=True, hist=False, plot_mean=True,
-        #                                         color_palette=None,save_dataset=False, output_dir=os.path.join(
-        #         output_dir,'strict_common_subset'))
+                                                                                                       'all'))
+        # Strict common subset with > 20% coverage
+        compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=False, sim_thres=None,
+                                           threshold=2,variant_coverage=0.2, plot=True, hist=False, plot_mean=True,
+                                           color_palette=None,save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20'))
+        # Common subset with > 20% coverage including similar compounds (>80% Tanimoto) tested in other variants
+        compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=True, sim_thres=0.8,
+                                           threshold=2,variant_coverage=0.2, plot=True, hist=False, plot_mean=True,
+                                           color_palette=None,save_dataset=False, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
+        # Strictly common subset (threshold=None)
+        compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=False, sim_thres=None,
+                                             threshold=None,variant_coverage=None, plot=True, hist=False, plot_mean=True,
+                                                color_palette=None,save_dataset=False, output_dir=os.path.join(
+                output_dir,'strict_common_subset'))
 
-    # # Extract relevant targets for reporting and modelling (using common subset with similarity)
-    # # A) Check which targets have the biggest common subsets
-    # extract_relevant_targets(os.path.join(output_dir,'common_subset_20_sim_80'),
-    #                          common=True, sim=True, sim_thres=0.8, threshold=2,variant_coverage=0.2,
-    #                          min_subset_n= 50, thres_error_mean=0, error_mean_limit='min')
-    # # B) Check which targets have the biggest variance between mutant activity distributions
-    # extract_relevant_targets(os.path.join(output_dir, 'common_subset_20_sim_80'),
-    #                          common=True, sim=True, sim_thres=0.8, threshold=2, variant_coverage=0.2,
-    #                          min_subset_n= 5, thres_error_mean=1,error_mean_limit='var_min')
-    # # C) Check which targets have the smallest variance between mutant activity distributions
-    # extract_relevant_targets(os.path.join(output_dir, 'common_subset_20_sim_80'),
-    #                          common=True, sim=True, sim_thres=0.8, threshold=2, variant_coverage=0.2,
-    #                          min_subset_n= 5, thres_error_mean=0.1,error_mean_limit='var_max')
-    #
-    # # Write datasets for modelling for the relevant targets of interest
-    # accession_large_subsets = extract_relevant_targets(os.path.join(output_dir,'common_subset_20_sim_80'),
-    #                          common=True, sim=True, sim_thres=0.8, threshold=2,variant_coverage=0.2,
-    #                          min_subset_n= 90, thres_error_mean=0, error_mean_limit='min')['accession'].unique().tolist()
-    #
-    # for accession in accession_large_subsets:
-    #     # Full dataset
-    #     compute_variant_activity_distribution(data_with_mutants, accession, common=False, sim=False, sim_thres=None,
-    #                                           threshold=None, variant_coverage=None, plot=False, hist=False, plot_mean=True,
-    #                                           color_palette=None,save_dataset=True,output_dir=os.path.join(output_dir, 'all'))
-    #     # Strict common subset with > 20% coverage
-    #     compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=False, sim_thres=None,
-    #                                        threshold=2,variant_coverage=0.2, plot=False, hist=False, plot_mean=True,
-    #                                        color_palette=None,save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20'))
-    #     # Common subset with > 20% coverage including similar compounds (>80% Tanimoto) tested in other variants
-    #     compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=True, sim_thres=0.8,
-    #                                        threshold=2,variant_coverage=0.2, plot=False, hist=False, plot_mean=True,
-    #                                        color_palette=None,save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
+    # Extract relevant targets for reporting and modelling (using common subset with similarity)
+    # A) Check which targets have the biggest common subsets
+    extract_relevant_targets(os.path.join(output_dir,'common_subset_20_sim_80'),
+                             common=True, sim=True, sim_thres=0.8, threshold=2,variant_coverage=0.2,
+                             min_subset_n= 50, thres_error_mean=0, error_mean_limit='min')
+    # B) Check which targets have the biggest variance between mutant activity distributions
+    extract_relevant_targets(os.path.join(output_dir, 'common_subset_20_sim_80'),
+                             common=True, sim=True, sim_thres=0.8, threshold=2, variant_coverage=0.2,
+                             min_subset_n= 5, thres_error_mean=1,error_mean_limit='var_min')
+    # C) Check which targets have the smallest variance between mutant activity distributions
+    extract_relevant_targets(os.path.join(output_dir, 'common_subset_20_sim_80'),
+                             common=True, sim=True, sim_thres=0.8, threshold=2, variant_coverage=0.2,
+                             min_subset_n= 5, thres_error_mean=0.1,error_mean_limit='var_max')
+
+    # Write datasets for modelling for the relevant targets of interest
+    accession_large_subsets = extract_relevant_targets(os.path.join(output_dir,'common_subset_20_sim_80'),
+                             common=True, sim=True, sim_thres=0.8, threshold=2,variant_coverage=0.2,
+                             min_subset_n= 90, thres_error_mean=0, error_mean_limit='min')['accession'].unique().tolist()
+
+    for accession in accession_large_subsets:
+        # Full dataset
+        compute_variant_activity_distribution(data_with_mutants, accession, common=False, sim=False, sim_thres=None,
+                                              threshold=None, variant_coverage=None, plot=False, hist=False, plot_mean=True,
+                                              color_palette=None,save_dataset=True,output_dir=os.path.join(output_dir, 'all'))
+        # Strict common subset with > 20% coverage
+        compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=False, sim_thres=None,
+                                           threshold=2,variant_coverage=0.2, plot=False, hist=False, plot_mean=True,
+                                           color_palette=None,save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20'))
+        # Common subset with > 20% coverage including similar compounds (>80% Tanimoto) tested in other variants
+        compute_variant_activity_distribution(data_with_mutants, accession, common=True, sim=True, sim_thres=0.8,
+                                           threshold=2,variant_coverage=0.2, plot=False, hist=False, plot_mean=True,
+                                           color_palette=None,save_dataset=True, output_dir=os.path.join(output_dir,'common_subset_20_sim_80'))
 
 
 
