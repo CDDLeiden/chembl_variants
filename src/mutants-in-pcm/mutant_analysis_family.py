@@ -563,17 +563,19 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
 
 
 if __name__ == "__main__":
-    output_dir = 'C:\\Users\gorostiolam\Documents\Gorostiola Gonzalez, ' \
-                 'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\0_mutant_statistics\\0_family_stats'
+    annotation_round = 1
+    output_dir = f'C:\\Users\gorostiolam\Documents\Gorostiola Gonzalez, ' \
+                 f'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\1_mutant_statistics\\0_family_stats\\' \
+                 f'round_{ annotation_round}'
 
     # Read ChEMBL family levels
     chembl_families = group_families(obtain_chembl_family(chembl_version='31'))
 
     # Read annotated bioactivity data with mutants (ChEMBL + Papyrus, at least one variant defined per target)
-    annotated_data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round=1)
+    annotated_data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round)
 
     # Read ChEMBL-only annotated bioactivity data for variants
-    chembl_annotated_data = chembl_annotation('31', annotation_round=1)
+    chembl_annotated_data = chembl_annotation('31', annotation_round)
 
     # Add family annotations
     annotated_data_families = link_bioactivity_to_family(annotated_data, chembl_families)

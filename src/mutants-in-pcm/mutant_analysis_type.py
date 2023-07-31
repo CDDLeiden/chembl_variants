@@ -623,11 +623,13 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
 if __name__ == "__main__":
     pd.options.display.width = 0
 
-    output_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
-             'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\3_mutation_type'
+    annotation_round = 1
+    output_dir = f'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
+             f'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\1_mutant_statistics\\2_mutation_type\\' \
+                 f'round_{annotation_round}'
 
     # Read mutant annotated data
-    data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round=1)
+    data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round)
 
     # Plot heatmaps with amino acid change counts
     plot_heatmap_aa_change(data, output_dir, 'variant', None, None)
@@ -642,7 +644,7 @@ if __name__ == "__main__":
 
     # Plot bubble plots with correlation between amino acid differences and distance to ligand COG
     dist_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
-               'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\0_mutant_statistics\\3_mutation_type' \
+               'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\1_mutant_statistics\\2_mutation_type' \
                '\\mutation_distances'
     for i,accession_list in enumerate([['P00533'],['P00519'],['Q72547']]):
         plot_bubble_aachange_distance(data, accession_list, accession_list[0], dist_dir, output_dir, True)

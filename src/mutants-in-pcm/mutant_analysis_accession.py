@@ -493,15 +493,17 @@ def plot_variant_fold_change_stats(stats:pd.DataFrame, filter_tag:str, variant_n
         plt.savefig(os.path.join(output_dir, f'variant_1_to_{variant_n}_ratio_{x_column}{filter_tag}.svg'))
 
 if __name__ == '__main__':
-    output_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
-                        'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\2_target_stats'
+    annotation_round = 1
+    output_dir = f'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
+                        f'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\1_mutant_statistics\\1_target_stats' \
+                 f'\\round_{annotation_round}'
 
     # Define an accession to analyze
     accession = 'P00533' # (EGFR)
 
     # Read annotated bioactivity data for the accession of interest
     accession_data = filter_accession_data(merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000,
-                                                                        annotation_round=1),accession)
+                                                                        annotation_round),accession)
 
     # Read Papyrus data only, for comparison
     papyrus_accession_data = filter_explore_activity_data('05.5', [accession])

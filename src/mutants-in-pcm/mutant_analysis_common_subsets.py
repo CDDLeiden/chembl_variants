@@ -1045,12 +1045,14 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
 
 if __name__ == '__main__':
     pd.options.display.width = 0
+    annotation_round = 1
     # Define output directory for mutant statistical analysis
-    output_dir = 'C:\\Users\gorostiolam\Documents\Gorostiola Gonzalez, ' \
-                 'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\0_mutant_statistics\\1_common_subset'
+    output_dir = f'C:\\Users\gorostiolam\Documents\Gorostiola Gonzalez, ' \
+                 f'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\1_mutant_statistics\\3_common_subset\\' \
+                 f'round_{annotation_round}'
 
     # Get data with mutants
-    data_with_mutants = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round=1)
+    data_with_mutants = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round)
 
     # Compute quick statistics from data with mutants to check which targets might be of interest
     stats = compute_stats_per_accession(data_with_mutants)
