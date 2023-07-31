@@ -245,17 +245,19 @@ def get_clustering_stats(accession: str, output_dir: str, subset_alias:str, cuto
         print(f'Cluster {c}: {s} compounds')
 
 
-def plot_bioactivity_distribution_cluster_subset(accession: str, output_dir: str):
+def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_round:str, output_dir: str):
     """
     Plot bioactivity distribution of compounds in clusters of the common subset. In this case,
     the common subset is very lax and includes all compounds that have been tested in at least
     two variants.
 
     :param accession: Uniprot accession code
+    :param annotation_round: round of annotation following further curation
     :param output_dir: path to write the results to
     """
     # Load data
-    accession_data = filter_accession_data(merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000), accession)
+    accession_data = filter_accession_data(merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000,
+                                                                        annotation_round),accession)
 
     # Create directory for the accession of interest
     if not os.path.exists(os.path.join(output_dir, accession)):
@@ -308,7 +310,7 @@ if __name__ == '__main__':
     # subsets
     for accession in ['P00533', 'Q72547', 'O75874','O60885','P00519','P07949','P10721','P13922','P15056','P22607',
     'P30613','P36888','Q15910','Q5S007','Q9UM73']:
-        plot_bioactivity_distribution_cluster_subset(accession, output_dir)
+        plot_bioactivity_distribution_cluster_subset(accession, 1, output_dir)
 
     # Plot distribution of bioactivities in most populated Butina clusters for targets with => 50% mutant bioactivity
     # ratio
@@ -316,4 +318,4 @@ if __name__ == '__main__':
                       'Q9P2K8', 'P21146', 'P48065', 'Q81R22', 'P07753', 'Q62120', 'Q15022', 'C1KIQ2', 'P36873',
                       'Q5NGQ3', 'Q9QUR6', 'D5F1R0', 'P02511', 'P11678', 'P0DOF9', 'P56690', 'Q05320', 'P13738',
                       'Q9NZN5', 'P15682', 'Q9NPD8']:
-        plot_bioactivity_distribution_cluster_subset(accession, output_dir)
+        plot_bioactivity_distribution_cluster_subset(accession, 1, output_dir)
