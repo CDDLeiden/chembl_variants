@@ -111,6 +111,8 @@ def map_aa_change(data: pd.DataFrame, direction: bool = False):
         mutation = x['target_id'].split('_')[1]
         if mutation == 'WT':
             aa_change = '-'
+        elif mutation == 'MUTANT':
+            aa_change = '-' # Undefined mutation (low confidence)
         else:
             wt_aa = mutation[0]
             mut_aa = mutation[-1]
@@ -559,6 +561,8 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     plot_df['mutation_type_color'] = plot_df['mutation_type'].apply(lambda x: palette_dict[x])
 
     # Plot bubble plot
+    sns.set_style('white')
+    sns.set_context('paper')
     fig, ax = plt.subplots(figsize=(6.5, 5))
 
     scatter = plt.scatter(
@@ -623,7 +627,7 @@ if __name__ == "__main__":
              'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\3_mutation_type'
 
     # Read mutant annotated data
-    data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
+    data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round=1)
 
     # Plot heatmaps with amino acid change counts
     plot_heatmap_aa_change(data, output_dir, 'variant', None, None)
