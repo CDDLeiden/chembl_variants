@@ -17,7 +17,8 @@ def get_directories(directories_file: str):
         print('The format of the file must be a dictionary.')
 
     try:
-        return directories_dict['mutant_analysis_dir'], directories_dict['modeling_dir'], directories_dict[
+        return directories_dict['annotation_analysis_dir'],directories_dict['mutant_analysis_dir'], directories_dict[
+            'modeling_dir'], directories_dict[
             'modeling_analysis_dir']
     except KeyError:
         print('The following directories need to be defined: mutant_analysis_dir, modeling_dir, and modeling_analysis_dir')
@@ -38,10 +39,22 @@ def get_distance_path(directories_file):
     :param directories_file:
     :return:
     """
-    mutant_analysis_dir, modeling_dir, modeling_analysis_dir = get_directories(directories_file)
+    annotation_analysis_dir, mutant_analysis_dir, modeling_dir, modeling_analysis_dir = get_directories(
+        directories_file)
     return os.path.join(mutant_analysis_dir, '2_mutation_type', 'distance')
 
-def get_analysis_path(directories_file: str, analysis_step: str, annotation_round: int):
+def get_annotation_analysis_path(directories_file: str, annotation_round: int):
+    """
+    Returns the path to the analysis directory for a specific annotation round.
+    :param directories_file:
+    :param annotation_round:
+    :return:
+    """
+    annotation_analysis_dir,mutant_analysis_dir, modeling_dir, modeling_analysis_dir = get_directories(
+        directories_file)
+    return update_directories(annotation_round, annotation_analysis_dir)
+
+def get_mutant_analysis_path(directories_file: str, analysis_step: str, annotation_round: int):
     """
     Returns the path to the analysis directory for a specific analysis step and annotation round.
     :param directories_file:
@@ -49,7 +62,8 @@ def get_analysis_path(directories_file: str, analysis_step: str, annotation_roun
     :param annotation_round:
     :return:
     """
-    mutant_analysis_dir, modeling_dir, modeling_analysis_dir = get_directories(directories_file)
+    annotation_analysis_dir, mutant_analysis_dir, modeling_dir, modeling_analysis_dir = get_directories(
+        directories_file)
 
     if analysis_step == 'family':
         analysis_step_path = os.path.join(mutant_analysis_dir, '0_family_stats')
