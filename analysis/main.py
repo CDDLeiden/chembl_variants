@@ -1,5 +1,9 @@
-from .utils import get_directories
+from utils import *
 
-# Set directories
-mutant_analysis_dir, modeling_dir, modeling_analysis_dir = get_directories('./directories.json')
+directories_file = './directories.json'
+annotation_round = 1
+
+annotation_dir = get_annotation_analysis_path(directories_file, annotation_round)
+
+
 
