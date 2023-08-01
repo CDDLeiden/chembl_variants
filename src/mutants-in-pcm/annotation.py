@@ -14,6 +14,9 @@ import chembl_downloader
 
 from preprocessing import obtain_chembl_data
 
+from data_path import get_data_path
+data_dir = get_data_path()
+
 def filter_assay_data(chembl_df: pd.DataFrame):
     """
     Filter from a dataframe with ChEMBL data the necessary columns for amino acid change annotation.
@@ -153,7 +156,7 @@ def define_aa_change_exceptions(assays_df_extracted: pd.DataFrame, chembl_versio
 
 
 def validate_aa_change(assays_df_extracted: pd.DataFrame,
-                       known_exceptions: str = '../../data/known_regex_exceptions.json',
+                       known_exceptions: str = os.path.join(data_dir,'known_regex_exceptions.json'),
                        automatic_exceptions: bool = True,
                        clean_df: bool = True,
                        **kwargs):
@@ -323,22 +326,20 @@ def manual_reannotation(chembl_version: str, annotation_round: int,
 
     # Read annotated assays from original annotation round
     try:
-        assays_annotated = pd.read_csv(f'../../data/chembl{chembl_version}_annotated_assays_round{previous_round}.csv',
-                                       sep='\t')
+        assays_annotated = pd.read_csv(os.path.join(data_dir,f'chembl{chembl_version}_annotated_assays_round'
+                                                             f'{previous_round}.csv'),sep='\t')
     except FileNotFoundError:
-        print(f'File ../../data/chembl{chembl_version}_annotated_assays_round{previous_round}.csv not found. '
+        print(f'File data/chembl{chembl_version}_annotated_assays_round{previous_round}.csv not found. '
               f'Please run annotation round {previous_round} first.')
 
     # Define output file name
-    output_file = f'../../data/chembl{chembl_version}_annotated_assays_round{annotation_round}.csv'
+    output_file = os.path.join(data_dir,f'chembl{chembl_version}_annotated_assays_round{annotation_round}.csv')
 
     if not os.path.exists(output_file):
         try:
             # Read false positives from file
-            false_positive_df = pd.read_csv(f'../../data/chembl{chembl_version}_wrong_annotated_assays_roun'
-                                            f'd{previous_round}.csv',
-                                            sep='\t',
-                                            usecols=['assay_id','accession','reason','group_reason'])
+            false_positive_df = pd.read_csv(os.path.join(data_dir,f'chembl{chembl_version}_wrong_annotated_assays_roun'
+                                            f'd{previous_round}.csv'),sep='\t',usecols=['assay_id','accession','reason','group_reason'])
             # Keep only undesired false positives (missed deletions/duplications and ambiguous genotypes are OK in round 2)
             false_positive_df = false_positive_df[~false_positive_df['group_reason']
                 .isin(['ambiguous genotype', 'missing deletion', 'missing duplication'])]
@@ -350,8 +351,8 @@ def manual_reannotation(chembl_version: str, annotation_round: int,
 
         try:
             # Read false negatives from file
-            false_negative_df = pd.read_csv(f'../../data/chembl{chembl_version}_rejected_assays_round'
-                                            f'{previous_round}.csv',
+            false_negative_df = pd.read_csv(os.path.join(data_dir,f'chembl{chembl_version}_rejected_assays_round'
+                                            f'{previous_round}.csv'),
                                             sep='\t',
                                             usecols=['assay_id','accession','rejection_flag'])
             # Keep only undesired false negatives (protein family associations and deletions are not OK in round2)
@@ -553,7 +554,7 @@ def chembl_annotation(chembl_version: str, annotation_round:str):
     :param annotation_round: round of annotation following further curation
     :return: pd.DataFrame with one entry per target_id (mutant) - chembl_id (compound) with mean pchembl value
     """
-    chembl_annotation_file = f'../../data/chembl{chembl_version}_annotated_data_round{annotation_round}.csv'
+    chembl_annotation_file = os.path.join(data_dir,f'chembl{chembl_version}_annotated_data_round{annotation_round}.csv')
 
     if not os.path.isfile(chembl_annotation_file):
         # Get chembl data
@@ -564,8 +565,8 @@ def chembl_annotation(chembl_version: str, annotation_round:str):
             chembl_assays_extracted = extract_aa_change(chembl_assays)
             chembl_assays_validated = validate_aa_change(chembl_assays_extracted, chembl_version=chembl_version)
             chembl_assays_annotated = create_papyrus_columns(chembl_assays_validated)
-            chembl_assays_annotated.to_csv(f'../../data/chembl{chembl_version}_annotated_assays_round{annotation_round}.csv',
-                                           sep='\t', index=False)
+            chembl_assays_annotated.to_csv(os.path.join(data_dir,f'chembl{chembl_version}_annotated_assays_round'
+                                                                 f'{annotation_round}.csv'),sep='\t', index=False)
         # In second and further rounds, use manually curated data to re-annotate assays
         elif annotation_round >= 2:
             chembl_assays_annotated = manual_reannotation(

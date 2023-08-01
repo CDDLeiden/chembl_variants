@@ -17,6 +17,8 @@ mapper = UniProtIDMapper()
 from preprocessing import merge_chembl_papyrus_mutants
 from mutant_analysis_protein import calculate_average_residue_distance_to_ligand
 
+from data_path import get_data_path
+data_dir = get_data_path()
 
 def map_mutation_distance_BLOSUM62(data: pd.DataFrame):
     """
@@ -35,7 +37,7 @@ def read_mutation_distance_Epstein():
     The distances are directional (i.e. F > M is not the same as M > F).
     :return: dictionary with a value per directional aa change
     """
-    matrix = pd.read_csv('../../data/Epstein_matrix.csv', sep=';', index_col=0)
+    matrix = pd.read_csv(os.path.join(data_dir,'Epstein_matrix.csv'), sep=';', index_col=0)
 
     epstein_dict ={}
 
@@ -62,7 +64,7 @@ def read_mutation_distance_Grantham():
     The distances are not directional.
     :return: dictionary with a value per directional aa change
     """
-    matrix = pd.read_csv('../../data/Grantham_matrix.csv', sep=';', index_col=0)
+    matrix = pd.read_csv(os.path.join(data_dir,'Grantham_matrix.csv'), sep=';', index_col=0)
 
     grantham_dict ={}
 
@@ -81,7 +83,7 @@ def read_blosum():
     Read BLOSUM62 matrix
     :return:
     """
-    matrix = pd.read_csv('../../data/BLOSUM62.txt', sep=';', index_col=0, skiprows=6)
+    matrix = pd.read_csv(os.path.join(data_dir,'BLOSUM62.txt'), sep=';', index_col=0, skiprows=6)
 
     blosum_dict ={}
 

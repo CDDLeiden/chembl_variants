@@ -16,6 +16,8 @@ import os
 from pandas.io.parsers import TextFileReader as PandasTextFileReader
 from papyrus_scripts.utils import IO as papyrusIO
 
+from data_path import get_data_path
+data_dir = get_data_path()
 
 def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: str = None):
     """Obtain assay descriptions and bioactivities annotated for mutants from ChEMBL using chembl-downloader.
@@ -29,7 +31,7 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
     if data_folder is not None:
         os.environ['PYSTOW_HOME'] = data_folder
 
-    chembl_file = '../../data/chembl_data.csv'
+    chembl_file = os.path.join(data_dir, 'chembl_data.csv')
     if not os.path.isfile(chembl_file):
 
         query = """
@@ -179,11 +181,11 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
     :param predefined_variants: whether to use ChEMBL pre-defined variants
     """
     if predefined_variants:
-        file_name = f'../../data/chembl{chembl_version}_papyrus{papyrus_version}' \
-                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv'
+        file_name = os.path.join(data_dir,f'chembl{chembl_version}_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
     else:
-        file_name = f'../../data/chembl{chembl_version}-annotated_papyrus{papyrus_version}' \
-                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv'
+        file_name = os.path.join(data_dir,f'chembl{chembl_version}-annotated_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
 
     if not os.path.exists(file_name):
         from annotation import chembl_annotation
@@ -286,11 +288,11 @@ def merge_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papy
     :param predefined_variants: whether to use ChEMBL pre-defined variants
     """
     if predefined_variants:
-        file_name = f'../../data/merged_chembl{chembl_version}_papyrus{papyrus_version}' \
-                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv'
+        file_name = os.path.join(data_dir,f'merged_chembl{chembl_version}_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
     else:
-        file_name = f'../../data/merged_chembl{chembl_version}-annotated_papyrus{papyrus_version}' \
-                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv'
+        file_name = os.path.join(data_dir,f'merged_chembl{chembl_version}-annotated_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
 
     if not os.path.exists(file_name):
         chembl_papyrus_with_mutants = combine_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor,
