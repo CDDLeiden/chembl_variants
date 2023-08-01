@@ -851,7 +851,7 @@ def prepare_for_plotting_bioactivity_distribution_stats(df: pd.DataFrame, subset
         def atoi(text):
            return int(text) if text.isdigit() else text
         def natural_keys(text):
-            return [ atoi(c) for c in re.split('(\d+)',text) ]
+            return [ atoi(c) for c in re.split(r'(\d+)',text) ]
         subset_order =df['subset_tag'].unique().tolist()
         subset_order.sort(key=natural_keys)
     elif subset_type == 'common_subsets':
@@ -1047,8 +1047,8 @@ if __name__ == '__main__':
     pd.options.display.width = 0
     annotation_round = 1
     # Define output directory for mutant statistical analysis
-    output_dir = f'C:\\Users\gorostiolam\Documents\Gorostiola Gonzalez, ' \
-                 f'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\1_mutant_statistics\\3_common_subset\\' \
+    output_dir = f'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
+                 f'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\1_mutant_statistics\\3_common_subset\\' \
                  f'round_{annotation_round}'
 
     # Get data with mutants

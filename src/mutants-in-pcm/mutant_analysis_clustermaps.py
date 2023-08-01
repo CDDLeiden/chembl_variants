@@ -251,7 +251,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
         cb.outline.set_visible(False)
 
         # Set legend label and move it to the top (instead of default bottom)
-        cb.set_label("Average distance of mutated residue\nCOG to ligand COG ($\AA$)", size=10, labelpad=10)
+        cb.set_label("Average distance of mutated residue\nCOG to ligand COG ($\\AA$)", size=10, labelpad=10)
 
         # save figure
         plt.savefig(os.path.join(output_dir, f'clustermap_{accession}_distance_groups_legend.svg'))
