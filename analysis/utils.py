@@ -40,7 +40,7 @@ def get_distance_path(directories_file):
     """
     annotation_analysis_dir, mutant_analysis_dir, modeling_dir, modeling_analysis_dir = get_directories(
         directories_file)
-    return os.path.join(mutant_analysis_dir, '2_mutation_type', 'distance')
+    return os.path.join(mutant_analysis_dir, '2_mutation_type', 'mutation_distances')
 
 def get_annotation_analysis_path(directories_file: str, annotation_round: int):
     """
