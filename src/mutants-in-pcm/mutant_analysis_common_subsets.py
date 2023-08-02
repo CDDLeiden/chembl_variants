@@ -75,7 +75,7 @@ def compute_pairwise_similarity(data: pd.DataFrame):
     :param data: DataFrame with activity data
     :return: dataframe with similarity values for all pairs of compounds
     """
-    out_file = os.path.join(data_dir,'data/similarity_matrix.csv')
+    out_file = os.path.join(data_dir,'similarity_matrix.csv')
     if not os.path.exists(out_file):
         unique_compounds = data.drop_duplicates('connectivity', keep='first')[['connectivity','SMILES']]
 
@@ -158,10 +158,16 @@ def get_variant_similar_subset(data:pd.DataFrame, accession:str, sim_thres:int, 
                                             variant_coverage=variant_coverage)
 
     # Check if output dataset file exists
-    dataset_file = os.path.join(output_dir, f'modelling_dataset_{accession}_{options_filename_tag}.csv')
-    coverage_file = os.path.join(output_dir, f'modelling_dataset_coverage_{accession}_{options_filename_tag}.json')
+    dataset_file = os.path.join(output_dir, options_filename_tag,
+                                f'modelling_dataset_{accession}_{options_filename_tag}.csv')
+    coverage_file = os.path.join(output_dir, options_filename_tag,
+                                 f'modelling_dataset_coverage_{accession}_{options_filename_tag}.json')
 
     if not os.path.exists(dataset_file):
+        # Check if output directory exists, else create
+        if not os.path.exists(os.path.join(output_dir, options_filename_tag)):
+            os.makedirs(os.path.join(output_dir, options_filename_tag))
+
         data_accession_agg = data[data['accession'] == accession]
 
         # Compute or read similarity
@@ -273,10 +279,16 @@ def get_variant_common_subset(data: pd.DataFrame, accession:str, common:bool, th
                                             variant_coverage=variant_coverage)
 
     # Check if output dataset file exists
-    dataset_file = os.path.join(output_dir, f'modelling_dataset_{accession}_{options_filename_tag}.csv')
-    coverage_file = os.path.join(output_dir, f'modelling_dataset_coverage_{accession}_{options_filename_tag}.json')
+    dataset_file = os.path.join(output_dir, options_filename_tag,
+                                f'modelling_dataset_{accession}_{options_filename_tag}.csv')
+    coverage_file = os.path.join(output_dir, options_filename_tag,
+                                 f'modelling_dataset_coverage_{accession}_{options_filename_tag}.json')
 
     if not os.path.exists(dataset_file):
+        # Check if output directory exists, else create
+        if not os.path.exists(os.path.join(output_dir, options_filename_tag)):
+            os.makedirs(os.path.join(output_dir, options_filename_tag))
+
         data_accession_agg = data[data['accession'] == accession]
 
         data_pivoted = pd.pivot(data_accession_agg,index='target_id',columns='connectivity',values='pchembl_value_Mean')
@@ -347,11 +359,15 @@ def read_common_subset(accession: str, common: bool, sim: bool, sim_thres: int,
     :param output_dir: Location for the pre-calculated files
     :return: pd.DataFrame with pchembl_value, connectivity, and target_id columns for the common subset of interest
     """
+    # Customize filename tags based on function options for subdirectories
+    options_filename_tag = get_filename_tag(common, sim, sim_thres, threshold,variant_coverage)
     # Read bioactivity data for common subset precalculated
     if not common:
-        data_common = pd.read_csv(os.path.join(output_dir, f'modelling_dataset_{accession}_All.csv'), sep='\t')
+        data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
+                                               f'modelling_dataset_{ accession}_All.csv'), sep='\t')
     else:
-        data_common = pd.read_csv(os.path.join(output_dir, f'modelling_dataset_{accession}_Thr{threshold}_Cov'
+        data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
+                                               f'modelling_dataset_{accession}_Thr{threshold}_Cov'
                                                           f'{int(variant_coverage*100)}_Sim'
                                                           f'{int(sim_thres*100)}.csv'), sep='\t')
 
@@ -490,8 +506,9 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
     options_filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
 
     # Check in output stats or dataset file if this accession was already analyzed. If so, skip analysis.
-    stat_file = os.path.join(output_dir, f'stats_file_{options_filename_tag}.txt')
-    dataset_file = os.path.join(output_dir, f'modelling_dataset_{accession}_{options_filename_tag}.csv')
+    stat_file = os.path.join(output_dir, options_filename_tag, f'stats_file_{options_filename_tag}.txt')
+    dataset_file = os.path.join(output_dir, options_filename_tag,
+                                f'modelling_dataset_{accession}_{options_filename_tag}.csv')
 
     if plot and (os.path.exists(stat_file)) and (accession in pd.read_csv(stat_file, sep='\t')['accession'].unique().tolist()):
         print(f'{accession} already plotted and statistics analyzed. Skipping...')
@@ -578,10 +595,10 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 plt.xlim(2, 12)
 
                 # Write figure
-                plt.savefig(os.path.join(output_dir,
+                plt.savefig(os.path.join(output_dir,options_filename_tag,
                                          f'variant_activity_distribution_{accession}_{options_filename_tag}.png'),
                                          bbox_inches='tight', dpi=300)
-                plt.savefig(os.path.join(output_dir,
+                plt.savefig(os.path.join(output_dir,options_filename_tag,
                                          f'variant_activity_distribution_{accession}_{options_filename_tag}.svg'))
 
                 # Write stats output file
@@ -617,11 +634,14 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
             # Write output file with skipped accession codes (not enough data for plotting)
             else:
                 print(f'Skipping accession {accession}: not enough data for plotting.')
-                if not os.path.exists(os.path.join(output_dir, f'skipped_accession_{options_filename_tag}.txt')):
-                    with open(os.path.join(output_dir, f'skipped_accession_{options_filename_tag}.txt'),'w') as file:
+                if not os.path.exists(os.path.join(output_dir, options_filename_tag,
+                                                   f'skipped_accession_{options_filename_tag}.txt')):
+                    with open(os.path.join(output_dir, options_filename_tag,
+                                           f'skipped_accession_{options_filename_tag}.txt'),'w') as file:
                         file.write(f'Skipping accession {accession}\n')
                 else:
-                    with open(os.path.join(output_dir, f'skipped_accession_{options_filename_tag}.txt'),'r+') as file:
+                    with open(os.path.join(output_dir, options_filename_tag,
+                                           f'skipped_accession_{options_filename_tag}.txt'),'r+') as file:
                         for line in file:
                             if accession in line:
                                 break
@@ -643,7 +663,7 @@ def read_common_subset_stats_file(file_dir: str, common: bool, sim: bool, sim_th
     :return: pd.DataFrame with the stats
     """
     filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
-    stat_df = pd.read_csv(os.path.join(file_dir, f'stats_file_{filename_tag}.txt'), sep='\t')
+    stat_df = pd.read_csv(os.path.join(file_dir, filename_tag, f'stats_file_{filename_tag}.txt'), sep='\t')
     stat_df.drop_duplicates(['accession', 'target_id'], inplace=True)
 
     return stat_df
@@ -715,7 +735,7 @@ def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: 
     :return: pd.DataFrame statistics for the accession codes that satisfy the input conditions
     """
     filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
-    stat_df = pd.read_csv(os.path.join(file_dir, f'stats_file_{filename_tag}.txt'), sep='\t')
+    stat_df = pd.read_csv(os.path.join(file_dir, filename_tag, f'stats_file_{filename_tag}.txt'), sep='\t')
     stat_df.drop_duplicates(['accession','target_id'], inplace=True)
 
     # Extract accession code with subset size bigger than min_subset
