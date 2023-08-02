@@ -792,7 +792,7 @@ def read_bioactivity_distribution_stats(stats_dir: str, subset_type: str, access
         dirs = [dir for dir in glob.glob(f'{stats_dir}/*/*/*.txt')]
         for dir in dirs:
             df = pd.read_csv(dir, sep='\t')
-            subset_tag = dir.split(sep='\\')[-2]
+            subset_tag = dir.split(sep='\\')[-3]
             df['subset_tag'] = subset_tag
             df_list.append(df)
     elif subset_type == 'common_subsets':
