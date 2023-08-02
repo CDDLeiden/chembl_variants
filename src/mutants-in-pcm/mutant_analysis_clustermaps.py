@@ -109,7 +109,7 @@ def plot_bioactivity_heatmap(accession: str, pivoted_data: pd.DataFrame, output_
     sns.heatmap(pivoted_data, cmap='mako_r', linewidth=0.1, linecolor='w', square=True,
                 cbar_kws={'label': 'pChEMBL value (Mean)', 'aspect': 0.2})
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, f'heatmap_{accession}.svg'))
+    plt.savefig(os.path.join(output_dir, accession, f'heatmap_{accession}.svg'))
 
 def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, compound_annotation: str,
                                 variant_annotation: str, output_dir: str, **kwargs):
@@ -136,7 +136,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                        linewidth=0.1, linecolor='w', cbar_kws={'label': 'pChEMBL value (Mean)'})
 
         # save plot
-        plt.savefig(os.path.join(output_dir, f'clustermap_{accession}.svg'))
+        plt.savefig(os.path.join(output_dir, accession, f'clustermap_{accession}.svg'))
 
     if compound_annotation == 'butina_clusters':
         connectivity_cluster_dict = kwargs['connectivity_cluster_dict']
@@ -165,7 +165,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                    bbox_to_anchor=(1, 1), bbox_transform=plt.gcf().transFigure, loc='upper right')
 
         # save figure
-        plt.savefig(os.path.join(output_dir, f'clustermap_{accession}_ButinaCluster_groups.svg'))
+        plt.savefig(os.path.join(output_dir, accession, f'clustermap_{accession}_ButinaCluster_groups.svg'))
 
     elif compound_annotation == 'year':
         connectivity_year_dict = kwargs['connectivity_year_dict']
@@ -196,7 +196,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                    bbox_to_anchor=(1, 1), bbox_transform=plt.gcf().transFigure, loc='upper right')
 
         # save figure
-        plt.savefig(os.path.join(output_dir, f'clustermap_{accession}_year_groups.svg'))
+        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_year_groups.svg'))
 
     if variant_annotation == 'ligand_distance':
         dist_dir = kwargs['dist_dir']
@@ -235,7 +235,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                        linewidth=0.1, linecolor='w', cbar_kws={'label': 'pChEMBL value (Mean)'},
                        row_colors=COLORS)
         # save figure
-        plt.savefig(os.path.join(output_dir, f'clustermap_{accession}_distance_groups.svg'))
+        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_distance_groups.svg'))
 
         # Create the colorbar
         pl.figure(figsize=(4, 0.5))
@@ -254,7 +254,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
         cb.set_label("Average distance of mutated residue\nCOG to ligand COG ($\\AA$)", size=10, labelpad=10)
 
         # save figure
-        plt.savefig(os.path.join(output_dir, f'clustermap_{accession}_distance_groups_legend.svg'))
+        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_distance_groups_legend.svg'))
 
     elif variant_annotation == 'aa_change_epstein':
         epstein_dict = kwargs['epstein_dict']
@@ -286,7 +286,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                        linewidth=0.1, linecolor='w', cbar_kws={'label': 'pChEMBL value (Mean)'},
                        row_colors=COLORS)
         # save figure
-        plt.savefig(os.path.join(output_dir, f'clustermap_{accession}_epstein_groups.svg'))
+        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_epstein_groups.svg'))
 
         # Create the colorbar
         pl.figure(figsize=(4, 0.5))
@@ -305,7 +305,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
         cb.set_label("Epstein coefficient of difference", size=10, labelpad=10)
 
         # save figure
-        plt.savefig(os.path.join(output_dir, f'clustermap_{accession}_epstein_groups_legend.svg'))
+        plt.savefig(os.path.join(output_dir, accession, f'clustermap_{accession}_epstein_groups_legend.svg'))
 
 
 
