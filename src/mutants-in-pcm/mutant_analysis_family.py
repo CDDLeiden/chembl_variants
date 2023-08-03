@@ -37,7 +37,7 @@ def obtain_chembl_family(chembl_version: str, chunksize: int = None, data_folder
     if data_folder is not None:
         os.environ['PYSTOW_HOME'] = data_folder
 
-    chembl_file = os.path.join(data_dir,'chembl_families.csv')
+    chembl_file = os.path.join(data_dir,f'chembl{chembl_version}_families.csv')
     if not os.path.isfile(chembl_file):
 
         query = """
