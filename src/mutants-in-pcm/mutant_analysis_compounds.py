@@ -230,7 +230,8 @@ def get_clustering_stats(accession: str, output_dir: str, subset_alias:str, cuto
     :param output_dir: path to output directory
     :param cutoff: distance cutoff to the cluster central molecule for molecule inclusion in cluster
     """
-    with open(os.path.join(output_dir,f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.json')) as in_file:
+    with open(os.path.join(output_dir, accession, f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.json')) as \
+            in_file:
         connectivity_cluster_dict = json.load(in_file)
 
     # Get cluster sizes
