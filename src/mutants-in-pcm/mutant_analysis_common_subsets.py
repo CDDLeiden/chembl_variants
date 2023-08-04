@@ -789,7 +789,7 @@ def read_bioactivity_distribution_stats(stats_dir: str, subset_type: str, access
     # Read stats for all possible subtypes
     df_list = []
     if subset_type == 'butina_clusters':
-        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/*/*.txt')]
+        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/*/*/*.txt')]
         for dir in dirs:
             df = pd.read_csv(dir, sep='\t')
             subset_tag = dir.split(sep='\\')[-3]
