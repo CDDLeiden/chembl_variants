@@ -186,6 +186,8 @@ def map_mutation_type(data: pd.DataFrame):
         mutation = x['target_id'].split('_')[1]
         if mutation == 'WT':
             mutation_type = 'NA'
+        elif mutation == 'MUTANT':
+            mutation_type = 'NA' # Undefined mutation (low confidence)
         else:
             wt_aa = mutation[0]
             mut_aa = mutation[-1]
@@ -223,7 +225,7 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
     if counts == 'variant':
         data_aa_change = data_aa_change.drop_duplicates(subset='target_id', keep='first')
 
-    # Drop WT instances
+    # Drop WT or undefined mutation instances
     data_aa_change = data_aa_change[data_aa_change['aa_change'] != '-']
     # Filter out silent mutations
     data_aa_change = data_aa_change[data_aa_change['aa_change'].apply(lambda x: x[0] != x[1])]
@@ -315,7 +317,7 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
     # Calculate the number of counts (activity datapoints/variants) for each type of aa change
     stats = data_aa_change.groupby(['aa_change', 'mutation_type']).count()
     plot_df = stats.loc[:, "pchembl_value_Mean"].reset_index()
-    # Remove WT instances (aa change == '-')
+    # Remove WT and undefined mutation instances (aa change == '-')
     plot_df = plot_df[plot_df['aa_change'] != '-']
     # Filter out silent mutations
     plot_df = plot_df[plot_df['aa_change'].apply(lambda x: x[0] != x[1])]
@@ -512,7 +514,7 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     # Annotate bioactivity data with aa change and mutation type
     data_aa_change = map_mutation_type(map_aa_change(data, direction))
 
-    # Drop WT instances
+    # Drop WT and undefined mutation instances
     data_aa_change = data_aa_change[data_aa_change['aa_change'] != '-']
     # Filter out silent mutations
     data_aa_change = data_aa_change[data_aa_change['aa_change'].apply(lambda x: x[0] != x[1])]
@@ -535,8 +537,14 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     accession_list_clean = []
     for accession in accession_list:
         try:
-            mutants_resn = [int(target_id.split('_')[1][1:-1]) if ('WT' not in target_id and accession in target_id) else
-                        'WT' for target_id in plot_df['target_id'].tolist()]
+            mutants_resn = []
+            for target_id in plot_df[plot_df['accession'] == accession]['target_id'].tolist():
+                if 'WT' in target_id:
+                    mutants_resn.append('WT')
+                elif 'MUTANT' in target_id: # Undefined mutant
+                    mutants_resn.append('MUTANT')
+                else:
+                    mutants_resn.append(int(target_id.split('_')[1][1:-1]))
         except ValueError:
             mutants_resn = []
         distances_dict_accession = calculate_average_residue_distance_to_ligand(accession=accession,
@@ -553,8 +561,16 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
             accession_list_clean.append(accession)
 
     # Map distances to mutants
-    plot_df['mutant_dist'] = plot_df['target_id'].apply(lambda x: distances_dict[x.split('_')[0]][x.split('_')[1][1:-1]]
-    if (('WT' not in x) and (x.split('_')[1][1:-1] in distances_dict[x.split('_')[0]].keys())) else 0)
+    def map_distance_to_mutant(row):
+        target_id = row['target_id']
+        if 'WT' in target_id:
+            return 0
+        elif 'MUTANT' in target_id: # Undefined mutant
+            return 0
+        else:
+            return distances_dict[target_id.split('_')[0]][int(target_id.split('_')[1][1:-1])]
+
+    plot_df['mutant_dist'] = plot_df.apply(map_distance_to_mutant, axis=1)
 
     # Define colors for mutation types, map to color property
     mutation_types = ['conservative', 'polar', 'size', 'charge', 'polar_size', 'charge_size']
