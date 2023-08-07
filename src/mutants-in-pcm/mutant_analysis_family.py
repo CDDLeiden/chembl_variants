@@ -143,6 +143,7 @@ def plot_circular_barplot_families(annotated_data_families: pd.DataFrame, family
         figure_tag = file_tag
 
     # Count number of bioactivity datapoints in total and in non-WT variants
+    # Here undefined mutants (_MUTANT) are considered mutants
     activity_mut = annotated_data_families[~annotated_data_families['target_id'].str.contains('WT')].groupby([family_level]).count()[['CID']].rename(columns={'CID':'activity_mut'})
 
     activity_all = annotated_data_families.groupby([family_level]).count()[['CID']].rename(columns={'CID':'activity_all'})
@@ -178,6 +179,10 @@ def plot_circular_barplot_families(annotated_data_families: pd.DataFrame, family
     # Set default font to Bell MT
     if not figure_panel:
         plt.rcParams.update({"font.family": "Bell MT"})
+        sns.set_context("notebook")
+    else:
+        plt.rcParams.update({"font.family": "sans-serif"})
+        sns.set_context("paper")
 
     # Set default font color to GREY12
     plt.rcParams["text.color"] = GREY12
@@ -372,10 +377,15 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
         figure_tag = file_tag
 
     # Count number of WT bioactivity datapoints in total and those that were not previously defined in ChEMBL
-    mut_new = annotated_data_families[~annotated_data_families['target_id'].str.contains('WT') &
-                                      annotated_data_families['mutation'].isna()].groupby([family_level]).count()[['chembl_id']].rename(columns={'chembl_id':'mut_new'})
+    # Here undefined mutants (_MUTANT) are not considered as new annotations as they are not precise enough
+    mut_new = annotated_data_families[~(annotated_data_families['target_id'].str.contains('WT') |
+                                        annotated_data_families['target_id'].str.contains('MUTANT')) &
+                                      (annotated_data_families['mutation'].isna() |
+                                       annotated_data_families['mutation'].str.contains('UNDEFINED_MUTANT'))].groupby([
+        family_level]).count()[['chembl_id']].rename(columns={'chembl_id':'mut_new'})
 
-    mut_all = annotated_data_families[~annotated_data_families['target_id'].str.contains('WT')].\
+    mut_all = annotated_data_families[~(annotated_data_families['target_id'].str.contains('WT'))
+                                      | annotated_data_families['target_id'].str.contains('MUTANT')].\
         groupby([family_level]).count()[['chembl_id']].rename(columns={'chembl_id':'mut_all'})
 
     summary_all = pd.concat([mut_new,mut_all],axis=1)
@@ -410,6 +420,10 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
     # Set default font to Bell MT
     if not figure_panel:
         plt.rcParams.update({"font.family": "Bell MT"})
+        sns.set_context("notebook")
+    else:
+        plt.rcParams.update({"font.family": "sans-serif"})
+        sns.set_context("paper")
 
     # Set default font color to GREY12
     plt.rcParams["text.color"] = GREY12
@@ -567,18 +581,20 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
 
 if __name__ == "__main__":
     annotation_round = 1
+    chembl_version, papyrus_version, papyrus_flavor = ['31', '05.5', 'nostereo']
+
     output_dir = f'C:\\Users\gorostiolam\Documents\Gorostiola Gonzalez, ' \
                  f'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\1_mutant_statistics\\0_family_stats\\' \
-                 f'round_{ annotation_round}'
+                 f'round_{annotation_round}'
 
     # Read ChEMBL family levels
-    chembl_families = group_families(obtain_chembl_family(chembl_version='31'))
+    chembl_families = group_families(obtain_chembl_family(chembl_version))
 
     # Read annotated bioactivity data with mutants (ChEMBL + Papyrus, at least one variant defined per target)
-    annotated_data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round)
+    annotated_data = merge_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor, 1_000_000, annotation_round)
 
     # Read ChEMBL-only annotated bioactivity data for variants
-    chembl_annotated_data = chembl_annotation('31', annotation_round)
+    chembl_annotated_data = chembl_annotation(chembl_version, annotation_round)
 
     # Add family annotations
     annotated_data_families = link_bioactivity_to_family(annotated_data, chembl_families)
