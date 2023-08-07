@@ -271,10 +271,13 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
         cbar_label = 'Epstein coefficient of difference'
 
     # Plot heatmap
+    sns.set_style('white')
+    sns.set_context('paper', font_scale=1.3)
     plt.figure(1,figsize=(5.5,5))
     ax = sns.heatmap(data=stats_heatmap, annot=False, cmap='rocket_r', cbar_kws={'label': cbar_label})
     ax.set(xlabel="", ylabel="")
     ax.xaxis.tick_top()
+    ax.yaxis.tick_left()
     plt.yticks(rotation=0)
 
     # Save heatmap
@@ -368,8 +371,8 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
                                                              distance_dict.items())))}
 
     # Plot stacked bars from dictionaries defined above
-    plt.rcParams["figure.figsize"] = [10, 7]
-    plt.rcParams["figure.autolayout"] = True
+    sns.set_style('white')
+    sns.set_context('talk')
     fig, ax = plt.subplots()
 
     # Each layer of stacked bars is plotted at a time
@@ -406,8 +409,7 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
     # Add color legend
     if color == 'mutation_type':
         legend = [mpatches.Patch(color=v, label=k.replace('_',' ').capitalize()) for k,v in palette_dict.items()]
-        plt.legend(handles=legend, title='Mutation type (severity)', loc='center left', bbox_to_anchor=(1, 0.5),
-                   handleheight=4, handlelength=4)
+        plt.legend(handles=legend, title='Mutation type (severity)', loc='center left', bbox_to_anchor=(1, 0.5))
 
 
     # Make plot prettier
@@ -538,13 +540,14 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     for accession in accession_list:
         try:
             mutants_resn = []
-            for target_id in plot_df[plot_df['accession'] == accession]['target_id'].tolist():
-                if 'WT' in target_id:
-                    mutants_resn.append('WT')
-                elif 'MUTANT' in target_id: # Undefined mutant
-                    mutants_resn.append('MUTANT')
-                else:
-                    mutants_resn.append(int(target_id.split('_')[1][1:-1]))
+            for target_id in plot_df['target_id'].tolist():
+                if accession in target_id:
+                    if 'WT' in target_id:
+                        mutants_resn.append('WT')
+                    elif 'MUTANT' in target_id: # Undefined mutant
+                        mutants_resn.append('MUTANT')
+                    else:
+                        mutants_resn.append(int(target_id.split('_')[1][1:-1]))
         except ValueError:
             mutants_resn = []
         distances_dict_accession = calculate_average_residue_distance_to_ligand(accession=accession,
@@ -568,7 +571,7 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
         elif 'MUTANT' in target_id: # Undefined mutant
             return 0
         else:
-            return distances_dict[target_id.split('_')[0]][int(target_id.split('_')[1][1:-1])]
+            return distances_dict[target_id.split('_')[0]][target_id.split('_')[1][1:-1]]
 
     plot_df['mutant_dist'] = plot_df.apply(map_distance_to_mutant, axis=1)
 
@@ -580,8 +583,8 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
 
     # Plot bubble plot
     sns.set_style('white')
-    sns.set_context('paper')
-    fig, ax = plt.subplots(figsize=(6.5, 5))
+    sns.set_context('talk', font_scale=1)
+    fig, ax = plt.subplots(figsize=(8, 5.5))
 
     scatter = plt.scatter(
         x=plot_df['distance_matrix'],
@@ -594,13 +597,14 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
         edgecolors="white",
         linewidth=2)
 
+
     # Add titles (main and on axis)
     if direction:
         plt.xlabel("Epstein coefficient of difference")
     else:
         plt.xlabel("Grantham's distance")
 
-    plt.ylabel("Average distance of mutated residue to ligand COG ($\AA$)")
+    plt.ylabel("Average distance of mutated\nresidue to ligand COG ($\AA$)")
     # map accession list to gene names
     if len(accession_list_clean) < 10:
         plt.title(f"{', '.join(accession_list_clean)}\n"
@@ -616,7 +620,7 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
                         bbox_to_anchor=(1,0.55))
     ax.add_artist(legend1)
 
-    handles, labels = scatter.legend_elements(prop="sizes", alpha=0.6, num=8, color='silver', markeredgewidth=0.0)
+    handles, labels = scatter.legend_elements(prop="sizes", alpha=0.6, num=6, color='silver', markeredgewidth=0.0)
     legend2 = ax.legend(handles, labels, loc="upper left", title="Number of datapoints", bbox_to_anchor=(1, 0.55))
 
     # Add limits
