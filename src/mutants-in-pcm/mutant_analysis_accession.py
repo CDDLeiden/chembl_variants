@@ -281,7 +281,8 @@ def plot_stats_bubble(stats: pd.DataFrame, filter_tag: str, hue_property: str, h
     h, l = g.get_legend_handles_labels()
     l_modified = copy.deepcopy(l)
     l_modified[0] = hue_title
-    l_modified[-5] = 'Mutant bioactivity %'
+    l_size_index = l.index('connectivity_mutant_percentage')
+    l_modified[l_size_index] = 'Mutant bioactivity %'
     g.legend(h, l_modified, loc='center left', bbox_to_anchor=(1.05, 0.5), ncol=1)
 
     # Zoom in
