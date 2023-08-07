@@ -331,8 +331,8 @@ def plot_stats_histograms(stats: pd.DataFrame, output_dir:str, save: bool = Fals
     :return: Six figures with histograms
     """
     # Define plot style
-    # sns.set_style("white")
-    # sns.set_context("paper", font_scale=2)
+    sns.set_style("white")
+    sns.set_context("paper", font_scale=2)
 
     # Plot 1
     sns.histplot(stats, x='connectivity',
@@ -479,7 +479,7 @@ def plot_variant_fold_change_stats(stats:pd.DataFrame, filter_tag:str, variant_n
 
     # Plot bubbleplot
     sns.scatterplot(data=stats, x=x_column, y='connectivity_variant_fold', size=size_column,
-                    color=color, alpha=0.5, sizes=(10, 500))
+                    color=color, alpha=0.5, sizes=(10, 300))
 
     # Add axes labels
     ordinal = lambda n: "%d%s" % (n, "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10::4])
