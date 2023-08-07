@@ -571,7 +571,10 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
         elif 'MUTANT' in target_id: # Undefined mutant
             return 0
         else:
-            return distances_dict[target_id.split('_')[0]][target_id.split('_')[1][1:-1]]
+            try:
+                return distances_dict[target_id.split('_')[0]][target_id.split('_')[1][1:-1]]
+            except KeyError:
+                return 0
 
     plot_df['mutant_dist'] = plot_df.apply(map_distance_to_mutant, axis=1)
 
@@ -584,7 +587,7 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     # Plot bubble plot
     sns.set_style('white')
     sns.set_context('talk', font_scale=1)
-    fig, ax = plt.subplots(figsize=(8, 5.5))
+    fig, ax = plt.subplots(figsize=(8, 5.3))
 
     scatter = plt.scatter(
         x=plot_df['distance_matrix'],
@@ -617,11 +620,11 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
                                 label=k.replace('_',' ').capitalize(),markersize=7) for k,v in palette_dict.items()]
     legend1 = ax.legend(handles=handles,
                         title='Mutation type', loc='lower left',
-                        bbox_to_anchor=(1,0.55))
+                        bbox_to_anchor=(1,0.45))
     ax.add_artist(legend1)
 
     handles, labels = scatter.legend_elements(prop="sizes", alpha=0.6, num=6, color='silver', markeredgewidth=0.0)
-    legend2 = ax.legend(handles, labels, loc="upper left", title="Number of datapoints", bbox_to_anchor=(1, 0.55))
+    legend2 = ax.legend(handles, labels, loc="upper left", title="Number of datapoints", bbox_to_anchor=(1, 0.45))
 
     # Add limits
     plt.ylim(0, 30)
