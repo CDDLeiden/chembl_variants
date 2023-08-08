@@ -480,6 +480,23 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
                    f'{aa_change_labels}_ColorMap.svg'
         plt.savefig(os.path.join(output_dir, out_file))
 
+def extract_residue_number_list(target_id_list: list):
+    """
+    From a list of unique target_id, extract the residue number of the first mutation
+    :param target_id_list: list of unique target_id
+    :return: list
+    """
+    mutants_resn = []
+    for target_id in target_id_list:
+        if 'WT' in target_id:
+            mutants_resn.append('WT')
+        elif 'MUTANT' in target_id:  # Undefined mutant
+            mutants_resn.append('MUTANT')
+        else:
+            mutants_resn.append(int(target_id.split('_')[1][1:-1]))
+    return mutants_resn
+
+
 def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subset_alias: str, dist_dir: str,
                                   output_dir: str, direction: bool = True, ignore_no_structure: bool = False):
     """
@@ -539,15 +556,8 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     accession_list_clean = []
     for accession in accession_list:
         try:
-            mutants_resn = []
-            for target_id in plot_df['target_id'].tolist():
-                if accession in target_id:
-                    if 'WT' in target_id:
-                        mutants_resn.append('WT')
-                    elif 'MUTANT' in target_id: # Undefined mutant
-                        mutants_resn.append('MUTANT')
-                    else:
-                        mutants_resn.append(int(target_id.split('_')[1][1:-1]))
+            target_id_list = [target_id for target_id in plot_df['target_id'].tolist() if accession in target_id]
+            mutants_resn = extract_residue_number_list(target_id_list)
         except ValueError:
             mutants_resn = []
         distances_dict_accession = calculate_average_residue_distance_to_ligand(accession=accession,

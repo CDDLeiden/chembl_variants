@@ -14,6 +14,7 @@ from matplotlib.cm import ScalarMappable
 from mutant_analysis_accession import filter_accession_data
 from mutant_analysis_common_subsets import read_common_subset
 from mutant_analysis_protein import calculate_average_residue_distance_to_ligand
+from mutant_analysis_type import extract_residue_number_list
 
 """Mutant statistics analysis. Part X"""
 """Analyzing bioactivity values for (strictly) common subsets per accession using clustermaps"""
@@ -202,15 +203,16 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
         dist_dir = kwargs['dist_dir']
 
         # Calculate distance to ligand from mutated residues
-        mutants_resn = [int(target_id.split('_')[1][1:-1]) if 'WT' not in target_id else 'WT' for target_id in
-                        pivoted_data.index.tolist()]
+        target_id_list = pivoted_data.index.tolist()
+        mutants_resn = extract_residue_number_list(target_id_list)
+
         distances_dict = calculate_average_residue_distance_to_ligand(accession=accession,
                                                                       resn=mutants_resn,
                                                                       common=False,
                                                                       pdb_dir=os.path.join(dist_dir, 'PDB'),
                                                                       output_dir=dist_dir)
         # Map distances to mutants
-        mutants_dist = [distances_dict[str(res)] if res != 'WT' else 0 for res in mutants_resn]
+        mutants_dist = [distances_dict[str(res)] if ((res != 'WT') or (res != 'MUTANT')) else 0 for res in mutants_resn]
 
         # Create color map based on distances
         COLORS = sns.light_palette("darkred", reverse=True, as_cmap=False)
@@ -261,7 +263,8 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
 
         # Map amino acid change to its Epstein coefficient
         mutants_epstein = [epstein_dict[f"{target_id.split('_')[1][0]}{target_id.split('_')[1][-1]}"] if
-                           target_id.split('_')[1] != 'WT' else 0 for target_id in pivoted_data.index.tolist()]
+                           ((target_id.split('_')[1] != 'WT') or (target_id.split('_')[1] != 'MUTANT')) else 0 for
+                           target_id in pivoted_data.index.tolist()]
 
         # Create color map based on distances
         COLORS = sns.light_palette("darkred", reverse=False, as_cmap=False)
