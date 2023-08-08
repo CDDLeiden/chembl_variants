@@ -246,7 +246,8 @@ def get_clustering_stats(accession: str, output_dir: str, subset_alias:str, cuto
         print(f'Cluster {c}: {s} compounds')
 
 
-def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_round:str, output_dir: str):
+def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_round:str, output_dir: str,
+                                                 overwrite: bool = False):
     """
     Plot bioactivity distribution of compounds in clusters of the common subset. In this case,
     the common subset is very lax and includes all compounds that have been tested in at least
@@ -255,6 +256,7 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
     :param accession: Uniprot accession code
     :param annotation_round: round of annotation following further curation
     :param output_dir: path to write the results to
+    :param overwrite: whether to overwrite existing bioactivity distribution plotting results
     """
     # Load data
     accession_data = filter_accession_data(merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000,
@@ -300,7 +302,7 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
         compute_variant_activity_distribution(data_cluster, accession, common=False, sim=False, sim_thres=None,
                                               threshold=None, variant_coverage=None, plot=True, hist=False,
                                               plot_mean=True, color_palette=palette_dict, save_dataset=False,
-                                              output_dir=cluster_dir)
+                                              output_dir=cluster_dir, overwrite=overwrite)
 
 
 if __name__ == '__main__':

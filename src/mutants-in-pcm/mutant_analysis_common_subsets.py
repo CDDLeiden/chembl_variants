@@ -479,7 +479,8 @@ def define_consistent_palette(data: pd.DataFrame, accession: str):
 
 def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, common: bool, sim: bool, sim_thres: int,
                                        threshold: int, variant_coverage: float, plot: bool, hist: bool, plot_mean: bool,
-                                       color_palette: dict, save_dataset: bool, output_dir: str):
+                                       color_palette: dict, save_dataset: bool, output_dir: str,
+                                        overwrite: bool = False):
     """
     Generate (sub)set of bioactivity data for target and options of interest and compute variant activity distribution
     with the option to plot it and report the dataset and statistics
@@ -500,6 +501,7 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                         automatically
     :param save_dataset: Whether to save the (subset) modelling dataset used for computing activity distribution
     :param output_dir: Location for the output files
+    :param overwrite: whether to overwrite existing bioactivity distribution plotting results
     :return: None
     """
     # Customize filename tags based on function options
@@ -510,9 +512,11 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
     dataset_file = os.path.join(output_dir, options_filename_tag,
                                 f'modelling_dataset_{accession}_{options_filename_tag}.csv')
 
-    if plot and (os.path.exists(stat_file)) and (accession in pd.read_csv(stat_file, sep='\t')['accession'].unique().tolist()):
+    if plot and (os.path.exists(stat_file)) and (accession in pd.read_csv(stat_file, sep='\t')[
+        'accession'].unique().tolist()) and not overwrite:
         print(f'{accession} already plotted and statistics analyzed. Skipping...')
-    elif save_dataset and (os.path.exists(dataset_file)) and (accession in pd.read_csv(stat_file, sep='\t')['accession'].unique().tolist()):
+    elif save_dataset and (os.path.exists(dataset_file)) and (accession in pd.read_csv(stat_file, sep='\t')[
+        'accession'].unique().tolist()) and not overwrite:
         print(f'{accession} dataset already saved. Skipping...')
 
     else:
