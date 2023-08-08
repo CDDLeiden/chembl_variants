@@ -689,6 +689,10 @@ pd.DataFrame, aggregate: bool = True):
         def agg_functions(x):
             d = {}
             d['variant_count'] = int(len(list(x['variant']))) # Number of variants in the common subset
+            if 'MUTANT' in [var.split('_')[1] for var in list(x['variant'])]:
+                d['undefined_mutants'] = True
+            else:
+                d['undefined_mutants'] = False
             d['common_subset_size'] = int(list(x['n_accession'])[0]) # Number of datapoints/compounds in the common
             # subset
             d['accession_set_size'] = int(list(x['connectivity'])[0]) # Number of datapoints (not unique compounds)
@@ -704,7 +708,8 @@ pd.DataFrame, aggregate: bool = True):
             d['Organism'] = list(x['Organism'])[0]
             d['HGNC_symbol'] = list(x['HGNC_symbol'])[0]
             return pd.Series(d,
-                             index=['variant_count', 'common_subset_size', 'accession_set_size', 'common_subset_ratio',
+                             index=['variant_count', 'undefined_mutants', 'common_subset_size', 'accession_set_size',
+                                    'common_subset_ratio',
                                     'accession_mutant_ratio',
                                     'l1', 'l2', 'l3', 'l4', 'Organism', 'HGNC_symbol'])
 
