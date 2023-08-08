@@ -462,9 +462,14 @@ def define_consistent_palette(data: pd.DataFrame, accession: str):
     :param accession: Uniprot accession code
     :return: seaborn color palette
     """
-    palette = {f'{accession}_WT': '#808080'} # Initialize with WT as grey
-    list_variants = [target_id for target_id in data[data['accession'] == accession]['target_id'].unique().tolist() if not 'WT' in target_id]
-    list_colors = sns.color_palette("Spectral", n_colors=len(list_variants)).as_hex()
+    palette = {f'{accession}_WT': '#808080', f'{accession}_MUTANT':'#333333'} # Initialize with WT and undefined
+    # mutant as grey
+    list_variants = [target_id for target_id in data[data['accession'] == accession]['target_id'].unique().tolist()
+                     if ((not 'WT' in target_id) and (not 'MUTANT' in target_id))]
+    if len(list_variants) > 1:
+        list_colors = sns.color_palette("Spectral", n_colors=len(list_variants)).as_hex()
+    else:
+        list_colors =['#f28e13'] # Orange to improve visibility
     try:
         list_variants_sorted = order_variants(list_variants)
     except ValueError:
