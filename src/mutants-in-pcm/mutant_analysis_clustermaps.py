@@ -212,7 +212,15 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                                                                       pdb_dir=os.path.join(dist_dir, 'PDB'),
                                                                       output_dir=dist_dir)
         # Map distances to mutants
-        mutants_dist = [distances_dict[str(res)] if ((res != 'WT') or (res != 'MUTANT')) else 0 for res in mutants_resn]
+        mutants_dist = []
+        for res in mutants_resn:
+            if (res == 'WT') or (res == 'MUTANT'):
+                mutants_dist.append(0)
+            else:
+                try:
+                    mutants_dist.append(distances_dict[str(res)])
+                except KeyError:
+                    mutants_dist.append(0)
 
         # Create color map based on distances
         COLORS = sns.light_palette("darkred", reverse=True, as_cmap=False)
@@ -263,7 +271,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
 
         # Map amino acid change to its Epstein coefficient
         mutants_epstein = [epstein_dict[f"{target_id.split('_')[1][0]}{target_id.split('_')[1][-1]}"] if
-                           ((target_id.split('_')[1] != 'WT') or (target_id.split('_')[1] != 'MUTANT')) else 0 for
+                           ((target_id.split('_')[1] != 'WT') and (target_id.split('_')[1] != 'MUTANT')) else 0 for
                            target_id in pivoted_data.index.tolist()]
 
         # Create color map based on distances
