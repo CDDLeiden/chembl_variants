@@ -652,7 +652,6 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 else:
                     with open(os.path.join(output_dir, options_filename_tag,
                                            f'skipped_accession_{options_filename_tag}.txt'),'r+') as file:
-                        if not accession in pd.read_csv(stat_file, sep='\t')['accession'].unique().tolist():
                             for line in file:
                                 if accession in line:
                                     break
