@@ -485,7 +485,7 @@ def define_consistent_palette(data: pd.DataFrame, accession: str):
 def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, common: bool, sim: bool, sim_thres: int,
                                        threshold: int, variant_coverage: float, plot: bool, hist: bool, plot_mean: bool,
                                        color_palette: dict, save_dataset: bool, output_dir: str,
-                                        overwrite: bool = False):
+                                        replot: bool = False):
     """
     Generate (sub)set of bioactivity data for target and options of interest and compute variant activity distribution
     with the option to plot it and report the dataset and statistics
@@ -506,7 +506,7 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                         automatically
     :param save_dataset: Whether to save the (subset) modelling dataset used for computing activity distribution
     :param output_dir: Location for the output files
-    :param overwrite: whether to overwrite existing bioactivity distribution plotting results
+    :param replot: whether to replot existing bioactivity distribution plotting results
     :return: None
     """
     # Customize filename tags based on function options
@@ -518,10 +518,10 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                                 f'modelling_dataset_{accession}_{options_filename_tag}.csv')
 
     if plot and (os.path.exists(stat_file)) and (accession in pd.read_csv(stat_file, sep='\t')[
-        'accession'].unique().tolist()) and not overwrite:
+        'accession'].unique().tolist()) and not replot:
         print(f'{accession} already plotted and statistics analyzed. Skipping...')
     elif save_dataset and (os.path.exists(dataset_file)) and (accession in pd.read_csv(stat_file, sep='\t')[
-        'accession'].unique().tolist()) and not overwrite:
+        'accession'].unique().tolist()) and not replot:
         print(f'{accession} dataset already saved. Skipping...')
 
     else:
@@ -637,7 +637,8 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 if not os.path.exists(stat_file):
                     stat_df.to_csv(stat_file, sep='\t', index=False)
                 else:
-                    stat_df.to_csv(stat_file, mode='a', sep='\t', index=False, header=False)
+                    if not accession in pd.read_csv(stat_file, sep='\t')['accession'].unique().tolist():
+                        stat_df.to_csv(stat_file, mode='a', sep='\t', index=False, header=False)
                 print(f'{accession} done.')
 
             # Write output file with skipped accession codes (not enough data for plotting)
@@ -651,11 +652,12 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 else:
                     with open(os.path.join(output_dir, options_filename_tag,
                                            f'skipped_accession_{options_filename_tag}.txt'),'r+') as file:
-                        for line in file:
-                            if accession in line:
-                                break
-                        else:
-                            file.write(f'Skipping accession {accession}\n')
+                        if not accession in pd.read_csv(stat_file, sep='\t')['accession'].unique().tolist():
+                            for line in file:
+                                if accession in line:
+                                    break
+                            else:
+                                file.write(f'Skipping accession {accession}\n')
 
 def read_common_subset_stats_file(file_dir: str, common: bool, sim: bool, sim_thres: int, threshold: int,
                                variant_coverage: float):
@@ -989,10 +991,11 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
 
     # Legend 1: type of error respect to WT (positive or negative)
     # Sublegend title
-    if not manuscript_quality:
-        legend_1_title = 'Mean pchembl_value error\ncompared to WT'
-    else:
-        legend_1_title = 'Mean pchembl_value\nerror (vs. WT)'
+    legend_1_title = 'Difference in mean\npchembl_value (vs. WT)'
+    legend_1_left_title = 'Variant\n> WT'
+    legend_1_right_title = 'Variant\n< WT'
+    legend_2_title = 'Absolute\ndifference'
+
     ax.annotate(legend_1_title, xy=(legend_x_pos-0.2, legend_y_pos-legend_y_pos_step*1.7),
                     ha="center", va="center",
                     fontsize="small", fontweight="bold", color="black")
@@ -1002,7 +1005,7 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
                s=1000,
                c='grey',
                 edgecolor="black", marker=MarkerStyle("o", fillstyle="left"))
-    ax.annotate('Positive\nerror', xy=(legend_x_pos-legend_1_x_pos_steps[0], legend_y_pos-legend_y_pos_step*2.3),
+    ax.annotate(legend_1_left_title, xy=(legend_x_pos-legend_1_x_pos_steps[0], legend_y_pos-legend_y_pos_step*2.3),
                     ha="center", va="center",
                     fontsize="small", fontweight="regular", color="black")
     # Right legend bubble and annotation
@@ -1011,7 +1014,7 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
                s=1000,
                c='grey',
                 edgecolor="white", alpha=0.5, marker=MarkerStyle("o", fillstyle="left"))
-    ax.annotate('Negative\nerror', xy=(legend_x_pos+legend_1_x_pos_steps[1], legend_y_pos-legend_y_pos_step*2.3),
+    ax.annotate(legend_1_right_title, xy=(legend_x_pos+legend_1_x_pos_steps[1], legend_y_pos-legend_y_pos_step*2.3),
                     ha="center", va="center",
                     fontsize="small", fontweight="regular", color="black")
 
@@ -1029,7 +1032,7 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
     bubbles_error_step_scaled = (bubbles_error_max_scaled-bubbles_error_min_scaled)//(bubbles_n-1)
 
     # Sublegend title
-    ax.annotate('Absolute\nerror', xy=(legend_x_pos-0.4, legend_y_pos-legend_y_pos_step*4.2),
+    ax.annotate(legend_2_title, xy=(legend_x_pos-0.4, legend_y_pos-legend_y_pos_step*4.2),
                     ha="right", va="center",
                     fontsize="small", fontweight="bold", color="black")
     # Legend bubbles
