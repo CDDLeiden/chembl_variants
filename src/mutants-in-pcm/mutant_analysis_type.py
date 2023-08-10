@@ -9,6 +9,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.ticker as plticker
 import seaborn as sns
 from Bio.SeqUtils import seq1
 from UniProtMapper import UniProtIDMapper
@@ -432,10 +433,10 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
         x_label = 'Number of bioactivity datapoints'
     elif counts == 'variant':
         x_label = 'Number of variants'
-    ax.set_xlabel(x_label, labelpad=20, weight='bold', size=12)
+    ax.set_xlabel(x_label, labelpad=10, weight='bold', size=14)
 
     # Set y-axis label
-    ax.set_ylabel("Mutation type", labelpad=20, weight='bold', size=12)
+    ax.set_ylabel("Mutation type", labelpad=10, weight='bold', size=14)
 
     # Set title
     plt.suptitle(f'Mutation types present in ChEMBL + Papyrus bioactivity datasets', fontsize=16)
@@ -460,13 +461,13 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
     # Create the colorbar (this is an independent plot)
     if color == 'distance_matrix':
         # Create new figure for the colormap
-        fig, ax = plt.subplots(figsize=(1, 3))
+        fig, ax = plt.subplots(figsize=(8, 1))
         fig.subplots_adjust(bottom=0.5)
         # Make colorbar
         cmap = sns.color_palette('rocket_r', as_cmap=True)
         norm = mpl.colors.Normalize(vmin=min(list(distance_dict.values())), vmax=max(list(distance_dict.values())))
         # Plot colorbar
-        cb = mpl.colorbar.ColorbarBase(norm=norm, cmap=cmap, orientation="vertical", ax=ax)
+        cb = mpl.colorbar.ColorbarBase(norm=norm, cmap=cmap, orientation="horizontal", ax=ax)
         # Remove the outline of the colorbar
         cb.outline.set_visible(False)
         # Set legend label and move it to the top (instead of default bottom)
@@ -597,7 +598,11 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     # Plot bubble plot
     sns.set_style('white')
     sns.set_context('talk', font_scale=1)
-    fig, ax = plt.subplots(figsize=(8, 5.3))
+    # fig, ax = plt.subplots(figsize=(6.4, 5))
+    fig, ax = plt.subplots()
+    ax.set_box_aspect(1)
+
+
 
     scatter = plt.scatter(
         x=plot_df['distance_matrix'],
@@ -610,14 +615,19 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
         edgecolors="white",
         linewidth=2)
 
+    # Add X ticks at specific locations
+    loc = plticker.MultipleLocator(base=0.2)  # this locator puts ticks at regular intervals
+    ax.xaxis.set_major_locator(loc)
 
     # Add titles (main and on axis)
     if direction:
-        plt.xlabel("Epstein coefficient of difference")
+        x_label = "Epstein coefficient of difference"
     else:
-        plt.xlabel("Grantham's distance")
+        x_label = "Grantham's distance"
+    plt.xlabel(x_label, labelpad=10, weight='bold', size=14)
 
-    plt.ylabel("Average distance of mutated\nresidue to ligand COG ($\AA$)")
+    plt.ylabel("Average distance of mutated\nresidue to ligand COG ($\AA$)",
+               labelpad=10, weight='bold', size=14)
     # map accession list to gene names
     if len(accession_list_clean) < 10:
         plt.title(f"{', '.join(accession_list_clean)}\n"
@@ -630,11 +640,11 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
                                 label=k.replace('_',' ').capitalize(),markersize=7) for k,v in palette_dict.items()]
     legend1 = ax.legend(handles=handles,
                         title='Mutation type', loc='lower left',
-                        bbox_to_anchor=(1,0.45))
+                        bbox_to_anchor=(1,0.45),fontsize="12")
     ax.add_artist(legend1)
 
     handles, labels = scatter.legend_elements(prop="sizes", alpha=0.6, num=6, color='silver', markeredgewidth=0.0)
-    legend2 = ax.legend(handles, labels, loc="upper left", title="Number of datapoints", bbox_to_anchor=(1, 0.45))
+    legend2 = ax.legend(handles, labels, loc="upper left", title="Data", bbox_to_anchor=(1.1, 0.45), fontsize="12")
 
     # Add limits
     plt.ylim(0, 30)
