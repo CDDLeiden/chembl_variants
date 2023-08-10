@@ -491,7 +491,7 @@ def plot_variant_fold_change_stats(stats:pd.DataFrame, filter_tag:str, variant_n
 
     # Save plot
     if save:
-        plt.savefig(os.path.join(output_dir, f'variant_1_to_{variant_n}_ratio_{x_column}{filter_tag}.svg'))
+        plt.savefig(os.path.join(output_dir, f'variant_1_to_{variant_n}_ratio_{size_column}{filter_tag}.svg'))
 
 if __name__ == '__main__':
     annotation_round = 1
