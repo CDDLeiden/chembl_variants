@@ -116,6 +116,7 @@ def get_statistics_across_accessions(chembl_version: str, papyrus_version: str, 
     :param papyrus_version: version of Papyrus
     :param papyrus_flavor: type of Papyrus data to get
     :param chunksize: chunk size for processing papyrus data
+    :param annotation_round: Round of annotation
     :param output_dir: directory to save results to
     :param save: whether to save results to file
     :return: pd.DataFrame with statistics. Each row is one protein (accession)
