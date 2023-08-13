@@ -9,6 +9,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.ticker as plticker
 import seaborn as sns
 from Bio.SeqUtils import seq1
 from UniProtMapper import UniProtIDMapper
@@ -17,6 +18,8 @@ mapper = UniProtIDMapper()
 from preprocessing import merge_chembl_papyrus_mutants
 from mutant_analysis_protein import calculate_average_residue_distance_to_ligand
 
+from data_path import get_data_path
+data_dir = get_data_path()
 
 def map_mutation_distance_BLOSUM62(data: pd.DataFrame):
     """
@@ -35,7 +38,7 @@ def read_mutation_distance_Epstein():
     The distances are directional (i.e. F > M is not the same as M > F).
     :return: dictionary with a value per directional aa change
     """
-    matrix = pd.read_csv('../../data/Epstein_matrix.csv', sep=';', index_col=0)
+    matrix = pd.read_csv(os.path.join(data_dir,'Epstein_matrix.csv'), sep=';', index_col=0)
 
     epstein_dict ={}
 
@@ -62,7 +65,7 @@ def read_mutation_distance_Grantham():
     The distances are not directional.
     :return: dictionary with a value per directional aa change
     """
-    matrix = pd.read_csv('../../data/Grantham_matrix.csv', sep=';', index_col=0)
+    matrix = pd.read_csv(os.path.join(data_dir,'Grantham_matrix.csv'), sep=';', index_col=0)
 
     grantham_dict ={}
 
@@ -81,7 +84,7 @@ def read_blosum():
     Read BLOSUM62 matrix
     :return:
     """
-    matrix = pd.read_csv('../../data/BLOSUM62.txt', sep=';', index_col=0, skiprows=6)
+    matrix = pd.read_csv(os.path.join(data_dir,'BLOSUM62.txt'), sep=';', index_col=0, skiprows=6)
 
     blosum_dict ={}
 
@@ -111,6 +114,8 @@ def map_aa_change(data: pd.DataFrame, direction: bool = False):
         mutation = x['target_id'].split('_')[1]
         if mutation == 'WT':
             aa_change = '-'
+        elif mutation == 'MUTANT':
+            aa_change = '-' # Undefined mutation (low confidence)
         else:
             wt_aa = mutation[0]
             mut_aa = mutation[-1]
@@ -182,6 +187,8 @@ def map_mutation_type(data: pd.DataFrame):
         mutation = x['target_id'].split('_')[1]
         if mutation == 'WT':
             mutation_type = 'NA'
+        elif mutation == 'MUTANT':
+            mutation_type = 'NA' # Undefined mutation (low confidence)
         else:
             wt_aa = mutation[0]
             mut_aa = mutation[-1]
@@ -219,7 +226,7 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
     if counts == 'variant':
         data_aa_change = data_aa_change.drop_duplicates(subset='target_id', keep='first')
 
-    # Drop WT instances
+    # Drop WT or undefined mutation instances
     data_aa_change = data_aa_change[data_aa_change['aa_change'] != '-']
     # Filter out silent mutations
     data_aa_change = data_aa_change[data_aa_change['aa_change'].apply(lambda x: x[0] != x[1])]
@@ -264,17 +271,19 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
         stats_heatmap = stats.pivot(columns='mut_aa',index='wt_aa',values='distance_matrix')
         cbar_label = 'Epstein coefficient of difference'
 
-    stats_heatmap.fillna(0,inplace=True)
-
     # Plot heatmap
+    sns.set_style('white')
+    sns.set_context('paper', font_scale=1.3)
     plt.figure(1,figsize=(5.5,5))
     ax = sns.heatmap(data=stats_heatmap, annot=False, cmap='rocket_r', cbar_kws={'label': cbar_label})
     ax.set(xlabel="", ylabel="")
     ax.xaxis.tick_top()
+    ax.yaxis.tick_left()
     plt.yticks(rotation=0)
 
     # Save heatmap
     plt.savefig(os.path.join(output_dir,f'heatmap_{counts}{subset_flag}.png'),dpi=300)
+    plt.close()
 
 def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direction: bool = True, counts: str = 'activity',
                                     color: str = 'mutation_type', subset_col: str = None, subset_value: str = None,
@@ -312,7 +321,7 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
     # Calculate the number of counts (activity datapoints/variants) for each type of aa change
     stats = data_aa_change.groupby(['aa_change', 'mutation_type']).count()
     plot_df = stats.loc[:, "pchembl_value_Mean"].reset_index()
-    # Remove WT instances (aa change == '-')
+    # Remove WT and undefined mutation instances (aa change == '-')
     plot_df = plot_df[plot_df['aa_change'] != '-']
     # Filter out silent mutations
     plot_df = plot_df[plot_df['aa_change'].apply(lambda x: x[0] != x[1])]
@@ -363,8 +372,8 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
                                                              distance_dict.items())))}
 
     # Plot stacked bars from dictionaries defined above
-    plt.rcParams["figure.figsize"] = [10, 7]
-    plt.rcParams["figure.autolayout"] = True
+    sns.set_style('white')
+    sns.set_context('talk')
     fig, ax = plt.subplots()
 
     # Each layer of stacked bars is plotted at a time
@@ -401,8 +410,7 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
     # Add color legend
     if color == 'mutation_type':
         legend = [mpatches.Patch(color=v, label=k.replace('_',' ').capitalize()) for k,v in palette_dict.items()]
-        plt.legend(handles=legend, title='Mutation type (severity)', loc='center left', bbox_to_anchor=(1, 0.5),
-                   handleheight=4, handlelength=4)
+        plt.legend(handles=legend, title='Mutation type (severity)', loc='center left', bbox_to_anchor=(1, 0.5))
 
 
     # Make plot prettier
@@ -425,10 +433,10 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
         x_label = 'Number of bioactivity datapoints'
     elif counts == 'variant':
         x_label = 'Number of variants'
-    ax.set_xlabel(x_label, labelpad=20, weight='bold', size=12)
+    ax.set_xlabel(x_label, labelpad=10, weight='bold', size=14)
 
     # Set y-axis label
-    ax.set_ylabel("Mutation type", labelpad=20, weight='bold', size=12)
+    ax.set_ylabel("Mutation type", labelpad=10, weight='bold', size=14)
 
     # Set title
     plt.suptitle(f'Mutation types present in ChEMBL + Papyrus bioactivity datasets', fontsize=16)
@@ -453,13 +461,13 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
     # Create the colorbar (this is an independent plot)
     if color == 'distance_matrix':
         # Create new figure for the colormap
-        fig, ax = plt.subplots(figsize=(1, 3))
+        fig, ax = plt.subplots(figsize=(8, 1))
         fig.subplots_adjust(bottom=0.5)
         # Make colorbar
         cmap = sns.color_palette('rocket_r', as_cmap=True)
         norm = mpl.colors.Normalize(vmin=min(list(distance_dict.values())), vmax=max(list(distance_dict.values())))
         # Plot colorbar
-        cb = mpl.colorbar.ColorbarBase(norm=norm, cmap=cmap, orientation="vertical", ax=ax)
+        cb = mpl.colorbar.ColorbarBase(norm=norm, cmap=cmap, orientation="horizontal", ax=ax)
         # Remove the outline of the colorbar
         cb.outline.set_visible(False)
         # Set legend label and move it to the top (instead of default bottom)
@@ -472,6 +480,23 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
         out_file = f'mutation_type_stacked{subset_flag}_{direction_flag}_Counts{counts}_Color{color}_Labels' \
                    f'{aa_change_labels}_ColorMap.svg'
         plt.savefig(os.path.join(output_dir, out_file))
+
+def extract_residue_number_list(target_id_list: list):
+    """
+    From a list of unique target_id, extract the residue number of the first mutation
+    :param target_id_list: list of unique target_id
+    :return: list
+    """
+    mutants_resn = []
+    for target_id in target_id_list:
+        if 'WT' in target_id:
+            mutants_resn.append('WT')
+        elif 'MUTANT' in target_id:  # Undefined mutant
+            mutants_resn.append('MUTANT')
+        else:
+            mutants_resn.append(int(target_id.split('_')[1][1:-1]))
+    return mutants_resn
+
 
 def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subset_alias: str, dist_dir: str,
                                   output_dir: str, direction: bool = True, ignore_no_structure: bool = False):
@@ -509,7 +534,7 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     # Annotate bioactivity data with aa change and mutation type
     data_aa_change = map_mutation_type(map_aa_change(data, direction))
 
-    # Drop WT instances
+    # Drop WT and undefined mutation instances
     data_aa_change = data_aa_change[data_aa_change['aa_change'] != '-']
     # Filter out silent mutations
     data_aa_change = data_aa_change[data_aa_change['aa_change'].apply(lambda x: x[0] != x[1])]
@@ -532,8 +557,8 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     accession_list_clean = []
     for accession in accession_list:
         try:
-            mutants_resn = [int(target_id.split('_')[1][1:-1]) if ('WT' not in target_id and accession in target_id) else
-                        'WT' for target_id in plot_df['target_id'].tolist()]
+            target_id_list = [target_id for target_id in plot_df['target_id'].tolist() if accession in target_id]
+            mutants_resn = extract_residue_number_list(target_id_list)
         except ValueError:
             mutants_resn = []
         distances_dict_accession = calculate_average_residue_distance_to_ligand(accession=accession,
@@ -550,8 +575,19 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
             accession_list_clean.append(accession)
 
     # Map distances to mutants
-    plot_df['mutant_dist'] = plot_df['target_id'].apply(lambda x: distances_dict[x.split('_')[0]][x.split('_')[1][1:-1]]
-    if (('WT' not in x) and (x.split('_')[1][1:-1] in distances_dict[x.split('_')[0]].keys())) else 0)
+    def map_distance_to_mutant(row):
+        target_id = row['target_id']
+        if 'WT' in target_id:
+            return 0
+        elif 'MUTANT' in target_id: # Undefined mutant
+            return 0
+        else:
+            try:
+                return distances_dict[target_id.split('_')[0]][target_id.split('_')[1][1:-1]]
+            except KeyError:
+                return 0
+
+    plot_df['mutant_dist'] = plot_df.apply(map_distance_to_mutant, axis=1)
 
     # Define colors for mutation types, map to color property
     mutation_types = ['conservative', 'polar', 'size', 'charge', 'polar_size', 'charge_size']
@@ -560,7 +596,13 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     plot_df['mutation_type_color'] = plot_df['mutation_type'].apply(lambda x: palette_dict[x])
 
     # Plot bubble plot
-    fig, ax = plt.subplots(figsize=(6.5, 5))
+    sns.set_style('white')
+    sns.set_context('talk', font_scale=1)
+    # fig, ax = plt.subplots(figsize=(6.4, 5))
+    fig, ax = plt.subplots()
+    ax.set_box_aspect(1)
+
+
 
     scatter = plt.scatter(
         x=plot_df['distance_matrix'],
@@ -573,13 +615,19 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
         edgecolors="white",
         linewidth=2)
 
+    # Add X ticks at specific locations
+    loc = plticker.MultipleLocator(base=0.2)  # this locator puts ticks at regular intervals
+    ax.xaxis.set_major_locator(loc)
+
     # Add titles (main and on axis)
     if direction:
-        plt.xlabel("Epstein coefficient of difference")
+        x_label = "Epstein coefficient of difference"
     else:
-        plt.xlabel("Grantham's distance")
+        x_label = "Grantham's distance"
+    plt.xlabel(x_label, labelpad=10, weight='bold', size=14)
 
-    plt.ylabel("Average distance of mutated residue to ligand COG ($\AA$)")
+    plt.ylabel("Average distance of mutated\nresidue to ligand COG ($\AA$)",
+               labelpad=10, weight='bold', size=14)
     # map accession list to gene names
     if len(accession_list_clean) < 10:
         plt.title(f"{', '.join(accession_list_clean)}\n"
@@ -592,11 +640,11 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
                                 label=k.replace('_',' ').capitalize(),markersize=7) for k,v in palette_dict.items()]
     legend1 = ax.legend(handles=handles,
                         title='Mutation type', loc='lower left',
-                        bbox_to_anchor=(1,0.55))
+                        bbox_to_anchor=(1,0.45),fontsize="12")
     ax.add_artist(legend1)
 
-    handles, labels = scatter.legend_elements(prop="sizes", alpha=0.6, num=8, color='silver', markeredgewidth=0.0)
-    legend2 = ax.legend(handles, labels, loc="upper left", title="Number of datapoints", bbox_to_anchor=(1, 0.55))
+    handles, labels = scatter.legend_elements(prop="sizes", alpha=0.6, num=6, color='silver', markeredgewidth=0.0)
+    legend2 = ax.legend(handles, labels, loc="upper left", title="Data", bbox_to_anchor=(1.1, 0.45), fontsize="12")
 
     # Add limits
     plt.ylim(0, 30)
@@ -620,11 +668,13 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
 if __name__ == "__main__":
     pd.options.display.width = 0
 
-    output_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
-             'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\3_mutation_type'
+    annotation_round = 1
+    output_dir = f'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
+             f'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\1_mutant_statistics\\2_mutation_type\\' \
+                 f'round_{annotation_round}'
 
     # Read mutant annotated data
-    data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
+    data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round)
 
     # Plot heatmaps with amino acid change counts
     plot_heatmap_aa_change(data, output_dir, 'variant', None, None)
@@ -639,7 +689,8 @@ if __name__ == "__main__":
 
     # Plot bubble plots with correlation between amino acid differences and distance to ligand COG
     dist_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
-             'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\1_common_subset'
+               'Marina\PROJECTS\\6_Mutants_PCM\DATA\\2_Analysis\\1_mutant_statistics\\2_mutation_type' \
+               '\\mutation_distances'
     for i,accession_list in enumerate([['P00533'],['P00519'],['Q72547']]):
         plot_bubble_aachange_distance(data, accession_list, accession_list[0], dist_dir, output_dir, True)
 

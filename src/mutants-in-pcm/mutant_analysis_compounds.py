@@ -72,8 +72,8 @@ def visualize_molecular_subset_highlights(accession: str, accession_data: pd.Dat
     :param accession_data: dataframe with bioactivity data for the target of interest 
     :param subset: list of compounds in the form of connectivities 
     :param subset_alias: alias to identify the subset of interest in the output file
-    :param match_type: type of substructure to highlight. Options include: 'Murcko' (highlight most common Murcko 
-    scaffold across the subset), 'ring' (highlight biggest ring system in each molecule), 'MCS' (highlight maximum 
+    :param match_type: type of substructure to highlight. Options include: 'Murcko' (highlight  Murcko 
+    scaffold), 'ring' (highlight biggest ring system in each molecule), 'MCS' (highlight maximum 
     common substructure accross the subset), 'SMILES' (highlight an exact match of a SMILES pattern defined in 
     substructure_to_match), 'SMARTS' (highlight a match for a SMARTS pattern defined in substructure_to_match)
     :param substructure_to_match: dictionary with the SMILES or SMARTS pattern to match for the accession of interest
@@ -92,17 +92,8 @@ def visualize_molecular_subset_highlights(accession: str, accession_data: pd.Dat
     mMols = subset_df['Molecule'].tolist()
 
     if match_type == 'Murcko':
-    # Calculate Murcko Scaffold Hashes
-        murckoHashList = [rdMolHash.MolHash(mMol, rdkit.Chem.rdMolHash.HashFunction.MurckoScaffold) for mMol in mMols]
-
-        # Get the most frequent Murcko Scaffold Hash
-        def mostFreq(list):
-            return max(set(list), key=list.count)
-        mostFreq_murckoHash = mostFreq(murckoHashList)
-
-        # Display molecules with MurkoHash as legends and highlight the mostFreq_murckoHash
-        mostFreq_murckoHash_mol = Chem.MolFromSmiles(mostFreq_murckoHash)
-        highlight_match = [mMol.GetSubstructMatch(mostFreq_murckoHash_mol) for mMol in mMols]
+        murckoList = [Chem.Scaffolds.MurckoScaffold.GetScaffoldForMol(mMol) for mMol in mMols]
+        highlight_match = [mMol.GetSubstructMatch(murcko) for mMol, murcko in zip(mMols, murckoList)]
 
     elif match_type == 'MCS':
         mcs = rdFMCS.FindMCS(mMols)
@@ -231,17 +222,45 @@ def butina_cluster_compounds(accession: str, accession_data: pd.DataFrame, subse
 
     return clusters,compounds, connectivity_cluster_dict
 
-def plot_bioactivity_distribution_cluster_subset(accession: str, output_dir: str):
+def get_clustering_stats(accession: str, output_dir: str, subset_alias:str, cutoff: float = 0.2):
+    """
+    Get statistics for clustering of compounds with Butina algorithm from the output json file.
+    :param accession: target Uniprot accession code
+    :param subset_alias: alias to identify the subset of interest in the output file
+    :param output_dir: path to output directory
+    :param cutoff: distance cutoff to the cluster central molecule for molecule inclusion in cluster
+    """
+    with open(os.path.join(output_dir, accession, f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.json')) as \
+            in_file:
+        connectivity_cluster_dict = json.load(in_file)
+
+    # Get cluster sizes
+    clusters = sorted(list(set(connectivity_cluster_dict.values())))
+
+    cluster_sizes = [len([k for k, v in connectivity_cluster_dict.items() if v == cluster]) for cluster in clusters]
+    print(f'Number of clusters: {len(clusters)}')
+    print(f'Number of compounds in clusters: {sum(cluster_sizes)}')
+
+    print(f'Number of compounds per cluster:')
+    for c,s in zip(clusters,cluster_sizes):
+        print(f'Cluster {c}: {s} compounds')
+
+
+def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_round:str, output_dir: str,
+                                                 replot: bool = False):
     """
     Plot bioactivity distribution of compounds in clusters of the common subset. In this case,
     the common subset is very lax and includes all compounds that have been tested in at least
     two variants.
 
     :param accession: Uniprot accession code
+    :param annotation_round: round of annotation following further curation
     :param output_dir: path to write the results to
+    :param replot: whether to replot existing bioactivity distribution plotting results
     """
     # Load data
-    accession_data = filter_accession_data(merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000), accession)
+    accession_data = filter_accession_data(merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000,
+                                                                        annotation_round),accession)
 
     # Create directory for the accession of interest
     if not os.path.exists(os.path.join(output_dir, accession)):
@@ -267,7 +286,7 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, output_dir: str
                                      'full_set', os.path.join(output_dir, accession), 0.5)
 
     # Define consistent color palette that includes all variants
-    palette_dict = define_consistent_palette(accession_data, accession)
+    palette_dict = define_consistent_palette(accession_data_common, accession)
 
     # Plot bioactivity distribution for 10 largest clusters
     for i in range(1, 11):
@@ -283,14 +302,25 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, output_dir: str
         compute_variant_activity_distribution(data_cluster, accession, common=False, sim=False, sim_thres=None,
                                               threshold=None, variant_coverage=None, plot=True, hist=False,
                                               plot_mean=True, color_palette=palette_dict, save_dataset=False,
-                                              output_dir=cluster_dir)
+                                              output_dir=cluster_dir, replot=replot)
 
 
 if __name__ == '__main__':
-    output_dir = 'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
-             'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\0_mutant_statistics\\4_compound_clusters'
+    annotation_round = 1
+    output_dir = f'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
+             f'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\1_mutant_statistics\\4_compound_clusters\\round' \
+                 f'_{annotation_round}'
 
-    # Plot distributions of bioactivities in most populated Butina clusters for targets with > 90 compounds
+    # Plot distributions of bioactivities in most populated Butina clusters for targets with > 90 compounds in common
+    # subsets
     for accession in ['P00533', 'Q72547', 'O75874','O60885','P00519','P07949','P10721','P13922','P15056','P22607',
     'P30613','P36888','Q15910','Q5S007','Q9UM73']:
-        plot_bioactivity_distribution_cluster_subset(accession, output_dir)
+        plot_bioactivity_distribution_cluster_subset(accession, annotation_round, output_dir)
+
+    # Plot distribution of bioactivities in most populated Butina clusters for targets with => 50% mutant bioactivity
+    # ratio
+    for accession in ['P15056', 'P23443', 'O75874', 'P13922', 'P30613', 'P01116', 'Q6P988', 'Q86WV6', 'P48735',
+                      'Q9P2K8', 'P21146', 'P48065', 'Q81R22', 'P07753', 'Q62120', 'Q15022', 'C1KIQ2', 'P36873',
+                      'Q5NGQ3', 'Q9QUR6', 'D5F1R0', 'P02511', 'P11678', 'P0DOF9', 'P56690', 'Q05320', 'P13738',
+                      'Q9NZN5', 'P15682', 'Q9NPD8']:
+        plot_bioactivity_distribution_cluster_subset(accession, annotation_round, output_dir)

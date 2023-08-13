@@ -14,6 +14,9 @@ import chembl_downloader
 
 from preprocessing import obtain_chembl_data
 
+from data_path import get_data_path
+data_dir = get_data_path()
+
 def filter_assay_data(chembl_df: pd.DataFrame):
     """
     Filter from a dataframe with ChEMBL data the necessary columns for amino acid change annotation.
@@ -153,7 +156,7 @@ def define_aa_change_exceptions(assays_df_extracted: pd.DataFrame, chembl_versio
 
 
 def validate_aa_change(assays_df_extracted: pd.DataFrame,
-                       known_exceptions: str = '../../data/known_regex_exceptions.json',
+                       known_exceptions: str = os.path.join(data_dir,'known_regex_exceptions.json'),
                        automatic_exceptions: bool = True,
                        clean_df: bool = True,
                        **kwargs):
@@ -271,7 +274,6 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
     return assays_df_validated
 
 
-
 def create_papyrus_columns(assays_df_validated: pd.DataFrame):
     """
     Create column 'target_id' and 'Protein_Type' matching Papyrus dataset style based on annotated and validated
@@ -302,6 +304,138 @@ def create_papyrus_columns(assays_df_validated: pd.DataFrame):
 
     return assays_df_validated
 
+def manual_reannotation(chembl_version: str, annotation_round: int,
+                        correct_false_positives: bool,correct_false_negatives: bool):
+    """
+    Manually re-annotate mutations based on the false positives and false negatives files compiled from semi-manual
+    curation
+    :param chembl_version: ChEMBL version that was used for the original annotation and the corrections
+    :param annotation_round: Round of annotation
+    :param correct_false_positives: If True, a file is needed containing the dataframe of new annotations in the
+        original round that were manually curated as false positives. Must contain at least columns 'assay_id',
+        'accession', 'reason', and 'group_reason'.'reason' identifies the reason why the assay was considered a
+        false positive. 'group_reason' agglomerates reasons into more generic groups.
+    :param correct_false_negatives: If True, a file is needed containing dataframe of ChEMBL annotations that were
+        rejected in the  original annotation round but were automatically grouped into categories, some of which are
+        considered false negatives. Must contain at least columns 'assay_id', 'accession', and 'rejection_flag'.
+        'rejection_flag' identifies the reason why the assay was rejected.
+    :return: pd.DataFrame with re-annotated mutations in assays
+    """
+    # Original annotation round is one less than the current round
+    previous_round = annotation_round - 1
+
+    # Read annotated assays from original annotation round
+    try:
+        assays_annotated = pd.read_csv(os.path.join(data_dir,f'chembl{chembl_version}_annotated_assays_round'
+                                                             f'{previous_round}.csv'),sep='\t')
+    except FileNotFoundError:
+        print(f'File data/chembl{chembl_version}_annotated_assays_round{previous_round}.csv not found. '
+              f'Please run annotation round {previous_round} first.')
+
+    # Define output file name
+    output_file = os.path.join(data_dir,f'chembl{chembl_version}_annotated_assays_round{annotation_round}.csv')
+
+    if not os.path.exists(output_file):
+        try:
+            # Read false positives from file
+            false_positive_df = pd.read_csv(os.path.join(data_dir,f'chembl{chembl_version}_wrong_annotated_assays_roun'
+                                            f'd{previous_round}.csv'),sep='\t',usecols=['assay_id','accession','reason','group_reason'])
+            # Keep only undesired false positives (missed deletions/duplications and ambiguous genotypes are OK in round 2)
+            false_positive_df = false_positive_df[~false_positive_df['group_reason']
+                .isin(['ambiguous genotype', 'missing deletion', 'missing duplication'])]
+            # Add false positive flag to annotated assays
+            assays_fp = pd.merge(assays_annotated, false_positive_df, how='left', on=['assay_id', 'accession'])
+        except FileNotFoundError:
+            correct_false_positives = False
+            print('No false positives file found. Continuing without correcting false positives.')
+
+        try:
+            # Read false negatives from file
+            false_negative_df = pd.read_csv(os.path.join(data_dir,f'chembl{chembl_version}_rejected_assays_round'
+                                            f'{previous_round}.csv'),
+                                            sep='\t',
+                                            usecols=['assay_id','accession','rejection_flag'])
+            # Keep only undesired false negatives (protein family associations and deletions are not OK in round2)
+            false_negative_df = false_negative_df[false_negative_df['rejection_flag'].isin(['original_shift_exception',
+                                                                                            'no_extraction',
+                                                                                            'original_not_valid',
+                                                                                            'original_exception_Autocuration'])]
+            # Add false negative flag to annotated assays
+            if correct_false_positives:
+                assays_fpfn = pd.merge(assays_fp, false_negative_df, how='left', on=['assay_id', 'accession'])
+            else:
+                assays_fpfn = pd.merge(assays_annotated, false_negative_df, how='left', on=['assay_id', 'accession'])
+        except FileNotFoundError:
+            correct_false_negatives = False
+            print('No false negatives file found. Continuing without correcting false negatives.')
+            if correct_false_positives:
+                assays_fpfn = assays_fp.copy(deep=True)
+
+        # Re-annotate assays
+        def correct_annotations_fp(row):
+            # Revert to WT when there is a ratio
+            if row['group_reason'] in ['mutant','mutant ratio']:
+                return f'{row["accession"]}_WT'
+            # Revert to WT when an additional automatic exception could be included
+            elif row['group_reason'] in ['assay', 'ligand']:
+                return f'{row["accession"]}_WT'
+            # Revert to WT when additional manual exception could be included
+            elif row['group_reason'] in ['cells', 'protein', 'other']:
+                return f'{row["accession"]}_WT'
+            # Create undefined mutation tag if there is a mutation missing or the mutation definition is ambiguous
+            elif row['group_reason'] in ['ambiguous mutation', 'missing mutation']:
+                return f'{row["accession"]}_MUTANT'
+            # For the others keep the original target id
+            else:
+                return row['target_id']
+
+        def correct_annotations_fn(row):
+            # Use ChEMBL mutants when a shift ocurred or a substitution was not extracted
+            if row['rejection_flag'] in ['original_shift_exception', 'no_extraction']:
+                chembl_mutation_tag = '_'.join(sorted(row['mutation'].split(','), key=lambda x: x[1:-1]))
+                return f'{row["accession"]}_{chembl_mutation_tag}'
+            # Create undefined mutation tag if there is a substitution or sequence mismatch (potential ChEMBL error)
+            if row['rejection_flag'] in ['original_exception_Autocuration', 'original_not_valid']:
+                return f'{row["accession"]}_MUTANT'
+            # For the others keep the original (or false positive corrected) target id
+            else:
+                return row['target_id']
+
+        assays_reannotated = assays_fpfn.copy(deep=True)
+        if correct_false_positives:
+            assays_reannotated['target_id'] = assays_reannotated.apply(correct_annotations_fp, axis=1)
+        if correct_false_negatives:
+            assays_reannotated['target_id'] = assays_reannotated.apply(correct_annotations_fn, axis=1)
+
+        assays_reannotated = assays_reannotated.drop(columns=['reason', 'group_reason', 'rejection_flag'])
+        assays_reannotated.to_csv(output_file, sep='\t', index=False)
+
+    else:
+        assays_reannotated = pd.read_csv(output_file, sep='\t')
+
+    return assays_reannotated
+
+
+def update_papyrus_protein_type(assays_df_reannotated: pd.DataFrame):
+    """
+    Update Protein_Type column based on the target_id column in the input DataFrame. This is useful in a second round
+    of annotations where the target_id column has been modified.
+    :param assays_df_reannotated: DataFrame containing a column with target IDs re-annotated in a second round with
+    mutations based on feedback from the first round of annotation.
+    :return: pd.DataFrame
+    """
+    def update_protein_type(row):
+        if 'WT' in row['target_id']:
+            return 'WT'
+        elif 'MUTANT' in row['target_id']:
+            return 'UNDEFINED MUTANT'
+        else:
+            return ";".join(row['target_id'].split('_')[1:])
+
+    assays_df_reannotated['Protein_Type'] = assays_df_reannotated.apply(update_protein_type, axis=1)
+
+    return assays_df_reannotated
+
 def mutate_sequence(df: pd.DataFrame, sequence_col: str, target_id_col: str, revert: bool = False):
     """
     Replaces the column with the target sequence with the mutant sequence based on mutations defined in the target_id
@@ -314,7 +448,7 @@ def mutate_sequence(df: pd.DataFrame, sequence_col: str, target_id_col: str, rev
     def replace_aa(row):
         sequence = row[sequence_col]
         for mut in row[target_id_col].split('_')[1:]:
-            if mut != 'WT':
+            if (mut != 'WT') and (mut != 'MUTANT'):
                 aa_wt = mut[0]
                 aa_mut = mut[-1]
                 res = int(re.search('\d+', mut).group(0))
@@ -330,20 +464,36 @@ def mutate_sequence(df: pd.DataFrame, sequence_col: str, target_id_col: str, rev
 
     return df
 
+
 def keep_chembl_defined_activity(chembl_df: pd.DataFrame):
     """
-
+    Remove entries with negative activity comments. Keep only entries with either pchembl_value or
+    'active'/'inactive' binary tags.
     :param chembl_df: DataFrame with ChEMBL bioactivity data of interest. It must contain columns of interest:
                     ['assay_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id', 'canonical_smiles']
     :return:
     """
     chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: str(x).lower())
     chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: math.nan if x == 'nan' else x)
-    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: 'active' if x in ['highly active', 'slightly active', 'weakly active', 'partially active'] else x)
-    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: 'inactive' if x in ['not active'] else x)
+    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(
+        lambda x: 'active' if x in ['highly active', 'slightly active', 'weakly active', 'partially active'] else x)
+    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(
+        lambda x: 'inactive' if x in ['not active'] else x)
+
+    # Keep entries with no negative activity comments
+    list_exclude = ['inconclusive', 'unspecified', 'Indeterminate', 'Ineffective', 'Insoluble', 'Insufficient',
+                    'Lack of solubility', 'Not Determined', 'ND(Insoluble)', 'tde', 'not tested', 'uncertain',
+                    'No compound available',
+                    'No compound detectable', 'No data', 'Non valid test', 'Not assayed', 'OUTCOME = Not detected',
+                    'Precipitate', 'Precipitated', 'Precipitates under the conditions of the study', 'Precipitation',
+                    'Qualitative measurement', 'Too insoluble', 'Unable to be measured', 'Unable to calculate']
+
+    chembl_df_good_activity = chembl_df[~chembl_df['activity_comment'].isin(list_exclude)]
 
     # Keep entries that are good for regression or classification tasks
-    chembl_df_defined_activity = chembl_df[(chembl_df['pchembl_value'].notna()) | (chembl_df['activity_comment'].isin(['active','inactive']))]
+    chembl_df_defined_activity = chembl_df_good_activity[
+        (chembl_df_good_activity['pchembl_value'].notna()) | (chembl_df_good_activity['activity_comment']
+                                                              .isin(['active', 'inactive']))]
 
     return chembl_df_defined_activity
 
@@ -378,29 +528,29 @@ def keep_highest_quality_activity(data: pd.DataFrame, target_col: str, comp_col:
     return data_high_quality
 
 
-def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_validated: pd.DataFrame):
+def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_annotated: pd.DataFrame):
     """
     Join mutation annotations to dataframe with ChEMBL bioactivity for modelling. Aggregate activity values for the same
     chembl_id-target_id pair by calculating the mean pchembl_value.
     :param chembl_df: DataFrame with ChEMBL bioactivity data of interest. It must contain columns of interest:
                     ['assay_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id', 'canonical_smiles']
-    :param assays_df_validated:DataFrame with annotated and validated mutations from assay descriptions. Must contain:
+    :param assays_df_annotated:DataFrame with annotated and validated mutations from assay descriptions. Must contain:
                                 ['assay_id', 'accession', 'target_id', 'sequence']
     :return: DataFrame with one row per chembl_id-target_id pair with an aggregated pchembl_value_Mean
     """
     # Mutate sequences based on extracted mutations
-    assays_df_validated = mutate_sequence(assays_df_validated, 'sequence', 'target_id')
+    assays_df_annotated = mutate_sequence(assays_df_annotated, 'sequence', 'target_id')
 
     # Keep columns of interest before joining dataframes
     chembl_df = chembl_df[['assay_id', 'activity_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id',
                            'canonical_smiles', 'mutation', 'year']]
-    assays_df_validated = assays_df_validated[['assay_id', 'accession', 'target_id', 'sequence']]
+    assays_df_annotated = assays_df_annotated[['assay_id', 'accession', 'target_id', 'sequence']]
 
     # Keep activity pair if pchembl value is defined or if an activity label is defined
     chembl_df_activity = keep_chembl_defined_activity(chembl_df)
 
     # Map mutations to bioactivity entries based on assay_id and accession
-    chembl_mutations_df = pd.merge(chembl_df_activity, assays_df_validated, how='left', on=['assay_id', 'accession'])
+    chembl_mutations_df = pd.merge(chembl_df_activity, assays_df_annotated, how='left', on=['assay_id', 'accession'])
 
     # Keep only assays with highest activity data quality
     chembl_bioactivity_df = keep_highest_quality_activity(chembl_mutations_df, 'target_id','chembl_id', 'pchembl_value', 'activity_comment')
@@ -412,23 +562,35 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_validated: pd.Data
     return chembl_bioactivity_df
 
 
-def chembl_annotation(chembl_version: str):
+def chembl_annotation(chembl_version: str, annotation_round:str):
     """
     Obtain ChEMBL bioactivity data and annotate for validated mutants. If multiple assays are available per mutant-compound pair,
     calculate mean pchembl value.
     :param chembl_version: Version of ChEMBL to obtain data from
+    :param annotation_round: round of annotation following further curation
     :return: pd.DataFrame with one entry per target_id (mutant) - chembl_id (compound) with mean pchembl value
     """
-    chembl_annotation_file = '../../data/chembl_annotated_data.csv'
+    chembl_annotation_file = os.path.join(data_dir,f'chembl{chembl_version}_annotated_data_round{annotation_round}.csv')
 
     if not os.path.isfile(chembl_annotation_file):
+        # Get chembl data
         chembl_data = obtain_chembl_data(chembl_version=chembl_version)
-        chembl_assays = filter_assay_data(chembl_data)
-        chembl_assays_extracted = extract_aa_change(chembl_assays)
-        chembl_assays_validated = validate_aa_change(chembl_assays_extracted, chembl_version=chembl_version)
-        chembl_assays_annotated = create_papyrus_columns(chembl_assays_validated)
-        chembl_bioactivity_dataset = map_activity_mutations(chembl_data, chembl_assays_annotated)
+        # In first round, annotate assays from scratch automatically
+        if annotation_round == 1:
+            chembl_assays = filter_assay_data(chembl_data)
+            chembl_assays_extracted = extract_aa_change(chembl_assays)
+            chembl_assays_validated = validate_aa_change(chembl_assays_extracted, chembl_version=chembl_version)
+            chembl_assays_annotated = create_papyrus_columns(chembl_assays_validated)
+            chembl_assays_annotated.to_csv(os.path.join(data_dir,f'chembl{chembl_version}_annotated_assays_round'
+                                                                 f'{annotation_round}.csv'),sep='\t', index=False)
+        # In second and further rounds, use manually curated data to re-annotate assays
+        elif annotation_round >= 2:
+            chembl_assays_annotated = manual_reannotation(
+                chembl_version, annotation_round,correct_false_positives=True, correct_false_negatives=True)
+            chembl_assays_annotated = update_papyrus_protein_type(chembl_assays_annotated)
 
+        # Map annotated mutations in assays to bioactivity data
+        chembl_bioactivity_dataset = map_activity_mutations(chembl_data, chembl_assays_annotated)
         chembl_bioactivity_dataset.to_csv(chembl_annotation_file, sep='\t', index=False)
 
     else:
@@ -438,4 +600,4 @@ def chembl_annotation(chembl_version: str):
 
 if __name__ == "__main__":
     pd.options.display.width = 0
-    chembl_annotation('31')
+    chembl_annotation('31', annotation_round=1)

@@ -1,0 +1,302 @@
+assay_id	accession	mutants	reason	N	group_reason
+208643	P25103	Sar9M	assay	1	assay
+801913	A4HSF7	A67I	extract	1	assay
+801916	A4HSF7	A67I	extract	1	assay
+801918	A4HSF7	A67I	extract	1	assay
+1791091	P11678	[H2O]	H2O2	1	assay
+1829875	P11678	[H2O]	H2O2	1	assay
+1640678	Q13627	H20	H2O2	1	assay
+213028	Q29463	H20	H2O2	1	assay
+792164	P19784	P2B	strain	1	assay
+1722367	P31648	[C57B]	cells	1	cells
+1722370	P31648	[C57B]	cells	1	cells
+1722371	P31648	[C57B]	cells	1	cells
+1723757	P06756	[A375P]	cells	1	cells
+1723758	P06756	[A375P]	cells	1	cells
+1760058	P10826	[G5L]	cells	1	cells
+1760064	P10826	[G5L]	cells	1	cells
+1925278	Q96BI3	[A4C]	cells	1	cells
+1925278	Q8WW43	[A4C]	cells	1	cells
+1925278	Q92542	[A4C]	cells	1	cells
+1987159	P51449	[M1H]	cells	1	cells
+1987162	P51449	[M1H]	cells	1	cells
+1987209	Q92753	[M1H]	cells	1	cells
+1987210	Q92753	[M1H]	cells	1	cells
+1504425	Q9NRG4	L21S	cells	1	cells
+1660546	P28223	[K293T]	cells HEX	1	cells
+1663652	P28223	[K293E]	cells HEX	1	cells
+1663657	P28223	[K293E]	cells HEX	1	cells
+1666016	P28223	[K293T]	cells HEX	1	cells
+1696089	P28223	[K293T]	cells HEX	1	cells
+1703549	P28224	[K293T]	cells HEX	1	cells
+1755195	P28223	[K293T]	cells HEX	1	cells
+1804104	P37231	[K293B]	cells HEX	1	cells
+1804105	P37231	[K293B]	cells HEX	1	cells
+1809450	P37231	[K293E]	cells HEX	1	cells
+1809451	P37231	[K293E]	cells HEX	1	cells
+1565729	P37231	K293A	cells HEX	1	cells
+965134	P28223	K293T	cells HEX	1	cells
+617905	Q9NYK1	K293X	cells HEX	1	cells
+1806447	P24941	[F4E]	binding protein	1	ligand
+1807510	Q9H7B4	[P3K]	peptide	1	ligand
+1807501	Q9H7B4	[P3K]	peptide	1	ligand
+1807511	Q9H7B4	[P3K]	peptide	1	ligand
+1807512	Q9H7B4	[P3K]	peptide	1	ligand
+1807515	Q9H7B4	[P3K]	peptide	1	ligand
+857866	P35408	P4R	radioligand	1	ligand
+1641334	P33981	[E4Y]	substrate	1	ligand
+1738417	P04637	[E2F]	substrate	1	ligand
+1824783	P36507	[K52R]	substrate	1	ligand
+1502715	P06748	T199N	substrate	1	ligand
+1502716	P06748	T199N	substrate	1	ligand
+1527069	P24941	F4E	substrate	1	ligand
+937464	P00734	H3S	substrate	1	ligand
+1475712	P00734	H3S	substrate	1	ligand
+1502709	P06748	T199N	substrate	1	ligand
+1502714	P06749	T199N	substrate	1	ligand
+1502713	P06750	T199N	substrate	1	ligand
+64019	P24530	S6C	substrate	1	ligand
+306605	P29475	H4B	substrate	1	ligand
+308164	P29475	H4B	substrate	1	ligand
+308163	P29475	H4B	substrate	1	ligand
+1751013	P00533	[A750P]	missing deletion	1	missing deletion
+1751014	P00533	[P753S]	missing deletion	1	missing deletion
+1766470	P10721	[D820A]	missing deletion	1	missing deletion
+1773682	P00533	[P753S]	missing deletion	1	missing deletion
+1773681	P00533	[A750P]	missing deletion	1	missing deletion
+1792344	P00533	[P753S]	missing deletion	1	missing deletion
+1792343	P00533	[A750P]	missing deletion	1	missing deletion
+823324	P00533		missing deletion	1	missing deletion
+882092	P00533		missing deletion	1	missing deletion
+882288	P00533		missing deletion	1	missing deletion
+641088	P00533		missing deletion	1	missing deletion
+641089	P00533		missing deletion	1	missing deletion
+748315	P00533		missing deletion	1	missing deletion
+774480	P00533		missing deletion	1	missing deletion
+774481	P00533		missing deletion	1	missing deletion
+590458	P00533		missing deletion	1	missing deletion
+590457	P00533		missing deletion	1	missing deletion
+1743342	Q03732	[S202G]	missing mutations	1	missing mutation
+1743375	Q03732	[S202G]	missing mutations	1	missing mutation
+1743376	Q03732	[S202G]	missing mutations	1	missing mutation
+1743377	Q03732	[S202G]	missing mutations	1	missing mutation
+1749442	Q5L478	[Y93C]	missing mutations	1	missing mutation
+1749471	Q5L478	[Y93H]	missing mutations	1	missing mutation
+1753661	Q5L478	[Y93H]	missing mutations	1	missing mutation
+1771313	P04585	[V370A]	missing mutations	1	missing mutation
+1771321	P04585	[V370A]	missing mutations	1	missing mutation
+1771322	P04585	[V370A]	missing mutations	1	missing mutation
+1771326	P04585	[V362I]	missing mutations	1	missing mutation
+2050540	P42866	[C57B]	mouse model	1	assay
+411212	P30968	[M24I, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411213	P30968	[N27A, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411214	P30968	[Q208E, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411219	P30968	[L300A, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411218	P30968	[F313L, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411221	P30968	[D302A, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411222	P30968	[D302N, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411223	P30968	[H306A, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411224	P30968	[H306E, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411215	P30968	[Y284L, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411217	P30968	[F309Q, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411220	P30968	[Y290L, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+411216	P30968	[F309L, F272L]	mutant to mutant ratio	1	mutant/mutant ratio
+1640690	P97714	T2B	other	1	other
+1640691	Q61616	T5A	other	1	other
+1641013	O14684	[P2A]	other	1	other
+1641862	Q08499	[E4B]	other	1	other
+1667573	Q03164	[H3K]	other	1	other
+1691736	P00734	[H3S]	other	1	other
+1701064	P29475	[H4B]	other	1	other
+1640638	P14416	D2V	other	1	other
+1640314	P45984	D3K	other	1	other
+1528655	P15304	K2C	other	1	other
+1640403	P10632	P3A	other	1	other
+1640398	P33261	P3A	other	1	other
+1641441	P10632	[P3A]	CYP	1	protein
+1641443	P33261	[P3A]	CYP	1	protein
+1641832	P33261	[P3A]	CYP	1	protein
+1534928	P33261	P3A	CYP	1	protein
+1536074	P33261	P3A	CYP	1	protein
+1475712	Q9R1A7	P3A	CYP	1	protein
+1485857	Q9R1A7	P3A	CYP	1	protein
+1797018	Q91WA3	[H3K]	histone	1	protein
+1797019	Q91WA3	[H3K]	histone	1	protein
+2122982	Q03164	[H3K]	histone	1	protein
+1640713	Q917CR9	E10A	PDE	1	protein
+1640714	Q01064	E10A	PDE	1	protein
+1640719	P51160	E10A	PDE	1	protein
+1640723	Q9Y233	E4A,E5A	PDE	1	protein
+1528678	Q14123	E9A	PDE	1	protein
+1527612	Q14123	E9A	PDE	1	protein
+1640767	P33261	[P3A]	PDE?	1	protein
+1640772	P10632	[P3A]	PDE?	1	protein
+1640919	Q9Y233	[E4D]	PDE?	1	protein
+1767451	P46098	[T43A]	receptor name	1	protein
+1767450	P46098	[T43A]	receptor name	1	protein
+1837079	P11229	[M1R]	target	1	protein
+1863435	O94768	[T17B]	target	1	protein
+1893951	Q9UQM7	[A2A]	target	1	protein
+1908756	Q9QUR6	[C57B]	target	1	protein
+1935411	P35408	[P4R]	target	1	protein
+1988385	P42336	[P3K]	target	1	protein
+2106773	Q61029	[P2B]	target	1	protein
+628415	P42263	A2A	target	1	protein
+627996	P42263	A2A	target	1	protein
+627986	P42263	A2A	target	1	protein
+625133	P42263	A2A	target	1	protein
+628407	P42263	A2A	target	1	protein
+61343	P14416	D2H	target	1	protein
+368894	P11229	M1R	target	1	protein
+2125758	P25440	Y113A, Y386A	ambiguous mutation	1	ambiguous mutation
+2127216	P25440	Y113A, Y386A	ambiguous mutation	1	ambiguous mutation
+2127283	P25440	Y113A, Y386A	ambiguous mutation	1	ambiguous mutation
+2125760	Q15059	Y73A, Y348A	ambiguous mutation	1	ambiguous mutation
+2127218	Q15059	Y73A, Y348A	ambiguous mutation	1	ambiguous mutation
+2127282	Q15059	Y73A, Y348A	ambiguous mutation	1	ambiguous mutation
+2125762	Q58F21	Y66A, Y309A	ambiguous mutation	1	ambiguous mutation
+2127220	Q58F21	Y66A, Y309A	ambiguous mutation	1	ambiguous mutation
+2127280	Q58F21	Y66A, Y309A	ambiguous mutation	1	ambiguous mutation
+1591152	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1591166	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1614078	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1620775	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1635788	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1635794	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1635796	Q5L478	Y93C	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1885146	Q5L478	Y93C	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1885148	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1885150	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1885168	Q5L478	K44R	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1885176	Q5L478	P58S	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1885174	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1921647	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1924254	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1929808	Q5L478	Y93H	correct, maybe genotipe makes a difference	1	ambiguous genotype
+1440950	P00533	T790M	missing deletion	1	missing deletion
+1512951	P00533	T790M	missing deletion	1	missing deletion
+1538381	P00533	T790M	missing deletion	1	missing deletion
+1538415	P00533	T790M	missing deletion	1	missing deletion
+1541390	P00533	T790M	missing deletion	1	missing deletion
+1551288	P00533	T790M	missing deletion	1	missing deletion
+1567370	P00533	T790M	missing deletion	1	missing deletion
+1566945	P00533	T790M	missing deletion	1	missing deletion
+1583980	P00533	T790M	missing deletion	1	missing deletion
+1674962	P00533	P753S	missing deletion	1	missing deletion
+1674961	P00533	A750P	missing deletion	1	missing deletion
+1693025	P00533	A750P	missing deletion	1	missing deletion
+1693026	P00533	P753S	missing deletion	1	missing deletion
+1699457	P00533	A750P	missing deletion	1	missing deletion
+1699458	P00533	P753S	missing deletion	1	missing deletion
+1737132	P00533	L858R	missing deletion	1	missing deletion
+1743850	P00533	T790M	missing deletion	1	missing deletion
+1743930	P00533	T790M	missing deletion	1	missing deletion
+1744965	P00533	T790M	missing deletion	1	missing deletion
+1751519	P00533	T790M, C797S	missing deletion	1	missing deletion
+1751525	P00533	T790M, C797S	missing deletion	1	missing deletion
+1781916	P00533	T790M	missing deletion	1	missing deletion
+1781998	P00533	T790M	missing deletion	1	missing deletion
+1808418	P00533	A750P	missing deletion	1	missing deletion
+1808419	P00533	A750P	missing deletion	1	missing deletion
+1833359	P00533	A750P	missing deletion	1	missing deletion
+1833360	P00533	P753S	missing deletion	1	missing deletion
+1857122	P00533	A750P	missing deletion	1	missing deletion
+1857123	P00533	P753S	missing deletion	1	missing deletion
+1864720	P00533	A750P	missing deletion	1	missing deletion
+1864721	P00533	P753S	missing deletion	1	missing deletion
+1880804	P00533	T790M	missing deletion	1	missing deletion
+1880983	P00533	A750P	missing deletion	1	missing deletion
+1880984	P00533	P753S	missing deletion	1	missing deletion
+1886873	P00533	P753S	missing deletion	1	missing deletion
+1886876	P00533	A750P	missing deletion	1	missing deletion
+1887525	P00533	P753S	missing deletion	1	missing deletion
+1887524	P00533	A750P	missing deletion	1	missing deletion
+1888001	P00533	A750P	missing deletion	1	missing deletion
+1888002	P00533	P753S	missing deletion	1	missing deletion
+1889551	P00533	P753S	missing deletion	1	missing deletion
+1889550	P00533	A750P	missing deletion	1	missing deletion
+1896805	P00533	T790M, C797S	missing deletion	1	missing deletion
+1913547	P00533	P753S	missing deletion	1	missing deletion
+1913546	P00533	A750P	missing deletion	1	missing deletion
+1991523	P00533	T790M, C797S	missing deletion	1	missing deletion
+2096602	P00533	A750P	missing deletion	1	missing deletion
+2096603	P00533	P753S	missing deletion	1	missing deletion
+2097190	P00533	A750P	missing deletion	1	missing deletion
+2097191	P00533	P753S	missing deletion	1	missing deletion
+2097618	P00533	P753S	missing deletion	1	missing deletion
+2097619	P00533	A750P	missing deletion	1	missing deletion
+2098207	P00533	A750P	missing deletion	1	missing deletion
+2098208	P00533	P753S	missing deletion	1	missing deletion
+2121848	P00533	T790M, C797S	missing deletion	1	missing deletion
+2134720	P00533	A750P	missing deletion	1	missing deletion
+1766431	P10721	V654A	missing deletion	1	missing deletion
+1766432	P10721	D816H	missing deletion	1	missing deletion
+1766433	P10721	T670I, D816H	missing deletion	1	missing deletion
+1766471	P10721	Y823D	missing deletion	1	missing deletion
+1766472	P10721	N822K, Y823D	missing deletion	1	missing deletion
+1766473	P10721	Y823D, A829P	missing deletion	1	missing deletion
+1860339	P10721	T670I	missing deletion	1	missing deletion
+1860340	P10721	T670I	missing deletion	1	missing deletion
+1433633	P13569	G551D	missing deletion	1	missing deletion
+1441757	P13569	F691L	missing deletion	1	missing deletion
+1545514	P36888	F691L	missing duplication	1	missing duplication
+1545513	P36888	D835Y	missing duplication	1	missing duplication
+1740165	P36888	D835V	missing duplication	1	missing duplication
+1740166	P36888	F691L	missing duplication	1	missing duplication
+1741291	P36888	D835V	missing duplication	1	missing duplication
+1741292	P36888	F691L	missing duplication	1	missing duplication
+1751060	P36888	D835V	missing duplication	1	missing duplication
+1751061	P36888	F691L	missing duplication	1	missing duplication
+1773729	P36888	F691L	missing duplication	1	missing duplication
+1773728	P36888	D835V	missing duplication	1	missing duplication
+1792391	P36888	F691L	missing duplication	1	missing duplication
+1792390	P36888	D835V	missing duplication	1	missing duplication
+1815553	P36888	D835V	missing duplication	1	missing duplication
+1831048	P36888	D835V	missing duplication	1	missing duplication
+1831049	P36888	F691L	missing duplication	1	missing duplication
+1852531	P36888	D835V	missing duplication	1	missing duplication
+1852532	P36888	F691L	missing duplication	1	missing duplication
+1857169	P36888	D835V	missing duplication	1	missing duplication
+1857170	P36888	F691L	missing duplication	1	missing duplication
+1859783	P36888	D835H	missing duplication	1	missing duplication
+1859784	P36888	D835Y	missing duplication	1	missing duplication
+1878254	P36888	D835Y	missing duplication	1	missing duplication
+1881030	P36888	D835V	missing duplication	1	missing duplication
+1881031	P36888	F691L	missing duplication	1	missing duplication
+1884401	P36888	D835V	missing duplication	1	missing duplication
+1884402	P36888	F691L	missing duplication	1	missing duplication
+1887572	P36888	F691L	missing duplication	1	missing duplication
+1887571	P36888	D835V	missing duplication	1	missing duplication
+1888048	P36888	D835V	missing duplication	1	missing duplication
+1888049	P36888	F691L	missing duplication	1	missing duplication
+1889597	P36888	D835V	missing duplication	1	missing duplication
+1889598	P36888	F691L	missing duplication	1	missing duplication
+1899308	P36888	D835V	missing duplication	1	missing duplication
+1899309	P36888	F691L	missing duplication	1	missing duplication
+1932663	P36888	D835V	missing duplication	1	missing duplication
+1932664	P36888	F691L	missing duplication	1	missing duplication
+1988888	P36888	D835V	missing duplication	1	missing duplication
+1988889	P36888	F691L	missing duplication	1	missing duplication
+2032152	P36888	F691L	missing duplication	1	missing duplication
+2047040	P36888	D835Y	missing duplication	1	missing duplication
+2047041	P36888	F691L	missing duplication	1	missing duplication
+2096649	P36888	D835V	missing duplication	1	missing duplication
+2096650	P36888	F691L	missing duplication	1	missing duplication
+2097237	P36888	D835V	missing duplication	1	missing duplication
+2097238	P36888	F691L	missing duplication	1	missing duplication
+2098254	P36888	D835V	missing duplication	1	missing duplication
+2098255	P36888	F691L	missing duplication	1	missing duplication
+2114787	P36888	F691L	missing duplication	1	missing duplication
+2114825	P36888	D835Y	missing duplication	1	missing duplication
+2114826	P36888	D835V	missing duplication	1	missing duplication
+1442036	P10721	T670I	missing mutation	1	missing mutation
+1675059	P10721	V559D	missing mutation	1	missing mutation
+1808511	P10721	P753S	missing mutation	1	missing mutation
+1833450	P10721	V559D	missing mutation	1	missing mutation
+1857220	P10721	V559D	missing mutation	1	missing mutation
+1864812	P10721	V559D	missing mutation	1	missing mutation
+1881081	P10721	V559D	missing mutation	1	missing mutation
+1887622	P10721	V559D	missing mutation	1	missing mutation
+1888099	P10721	V559D	missing mutation	1	missing mutation
+1889648	P10721	V559D	missing mutation	1	missing mutation
+1886716	P58335	R40C	missing mutation	1	missing mutation

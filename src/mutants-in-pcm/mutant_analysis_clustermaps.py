@@ -11,10 +11,10 @@ from matplotlib import colors
 from math import floor
 from matplotlib.cm import ScalarMappable
 
-from preprocessing import merge_chembl_papyrus_mutants
 from mutant_analysis_accession import filter_accession_data
 from mutant_analysis_common_subsets import read_common_subset
 from mutant_analysis_protein import calculate_average_residue_distance_to_ligand
+from mutant_analysis_type import extract_residue_number_list
 
 """Mutant statistics analysis. Part X"""
 """Analyzing bioactivity values for (strictly) common subsets per accession using clustermaps"""
@@ -110,7 +110,7 @@ def plot_bioactivity_heatmap(accession: str, pivoted_data: pd.DataFrame, output_
     sns.heatmap(pivoted_data, cmap='mako_r', linewidth=0.1, linecolor='w', square=True,
                 cbar_kws={'label': 'pChEMBL value (Mean)', 'aspect': 0.2})
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'figures', f'heatmap_{accession}.svg'))
+    plt.savefig(os.path.join(output_dir, accession, f'heatmap_{accession}.svg'))
 
 def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, compound_annotation: str,
                                 variant_annotation: str, output_dir: str, **kwargs):
@@ -137,7 +137,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                        linewidth=0.1, linecolor='w', cbar_kws={'label': 'pChEMBL value (Mean)'})
 
         # save plot
-        plt.savefig(os.path.join(output_dir, 'figures', f'clustermap_{accession}.svg'))
+        plt.savefig(os.path.join(output_dir, accession, f'clustermap_{accession}.svg'))
 
     if compound_annotation == 'butina_clusters':
         connectivity_cluster_dict = kwargs['connectivity_cluster_dict']
@@ -166,7 +166,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                    bbox_to_anchor=(1, 1), bbox_transform=plt.gcf().transFigure, loc='upper right')
 
         # save figure
-        plt.savefig(os.path.join(output_dir, 'figures', f'clustermap_{accession}_ButinaCluster_groups.svg'))
+        plt.savefig(os.path.join(output_dir, accession, f'clustermap_{accession}_ButinaCluster_groups.svg'))
 
     elif compound_annotation == 'year':
         connectivity_year_dict = kwargs['connectivity_year_dict']
@@ -197,21 +197,30 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                    bbox_to_anchor=(1, 1), bbox_transform=plt.gcf().transFigure, loc='upper right')
 
         # save figure
-        plt.savefig(os.path.join(output_dir, 'figures', f'clustermap_{accession}_year_groups.svg'))
+        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_year_groups.svg'))
 
     if variant_annotation == 'ligand_distance':
         dist_dir = kwargs['dist_dir']
 
         # Calculate distance to ligand from mutated residues
-        mutants_resn = [int(target_id.split('_')[1][1:-1]) if 'WT' not in target_id else 'WT' for target_id in
-                        pivoted_data.index.tolist()]
+        target_id_list = pivoted_data.index.tolist()
+        mutants_resn = extract_residue_number_list(target_id_list)
+
         distances_dict = calculate_average_residue_distance_to_ligand(accession=accession,
                                                                       resn=mutants_resn,
                                                                       common=False,
                                                                       pdb_dir=os.path.join(dist_dir, 'PDB'),
                                                                       output_dir=dist_dir)
         # Map distances to mutants
-        mutants_dist = [distances_dict[str(res)] if res != 'WT' else 0 for res in mutants_resn]
+        mutants_dist = []
+        for res in mutants_resn:
+            if (res == 'WT') or (res == 'MUTANT'):
+                mutants_dist.append(0)
+            else:
+                try:
+                    mutants_dist.append(distances_dict[str(res)])
+                except KeyError:
+                    mutants_dist.append(0)
 
         # Create color map based on distances
         COLORS = sns.light_palette("darkred", reverse=True, as_cmap=False)
@@ -236,7 +245,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                        linewidth=0.1, linecolor='w', cbar_kws={'label': 'pChEMBL value (Mean)'},
                        row_colors=COLORS)
         # save figure
-        plt.savefig(os.path.join(output_dir, 'figures', f'clustermap_{accession}_distance_groups.svg'))
+        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_distance_groups.svg'))
 
         # Create the colorbar
         pl.figure(figsize=(4, 0.5))
@@ -252,17 +261,18 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
         cb.outline.set_visible(False)
 
         # Set legend label and move it to the top (instead of default bottom)
-        cb.set_label("Average distance of mutated residue\nCOG to ligand COG ($\AA$)", size=10, labelpad=10)
+        cb.set_label("Average distance of mutated residue\nCOG to ligand COG ($\\AA$)", size=10, labelpad=10)
 
         # save figure
-        plt.savefig(os.path.join(output_dir, 'figures', f'clustermap_{accession}_distance_groups_legend.svg'))
+        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_distance_groups_legend.svg'))
 
     elif variant_annotation == 'aa_change_epstein':
         epstein_dict = kwargs['epstein_dict']
 
         # Map amino acid change to its Epstein coefficient
         mutants_epstein = [epstein_dict[f"{target_id.split('_')[1][0]}{target_id.split('_')[1][-1]}"] if
-                           target_id.split('_')[1] != 'WT' else 0 for target_id in pivoted_data.index.tolist()]
+                           ((target_id.split('_')[1] != 'WT') and (target_id.split('_')[1] != 'MUTANT')) else 0 for
+                           target_id in pivoted_data.index.tolist()]
 
         # Create color map based on distances
         COLORS = sns.light_palette("darkred", reverse=False, as_cmap=False)
@@ -287,7 +297,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                        linewidth=0.1, linecolor='w', cbar_kws={'label': 'pChEMBL value (Mean)'},
                        row_colors=COLORS)
         # save figure
-        plt.savefig(os.path.join(output_dir, 'figures', f'clustermap_{accession}_epstein_groups.svg'))
+        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_epstein_groups.svg'))
 
         # Create the colorbar
         pl.figure(figsize=(4, 0.5))
@@ -306,7 +316,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
         cb.set_label("Epstein coefficient of difference", size=10, labelpad=10)
 
         # save figure
-        plt.savefig(os.path.join(output_dir, 'figures', f'clustermap_{accession}_epstein_groups_legend.svg'))
+        plt.savefig(os.path.join(output_dir, accession, f'clustermap_{accession}_epstein_groups_legend.svg'))
 
 
 
