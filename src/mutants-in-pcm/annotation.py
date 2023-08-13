@@ -374,7 +374,7 @@ def manual_reannotation(chembl_version: str, annotation_round: int,
         # Re-annotate assays
         def correct_annotations_fp(row):
             # Revert to WT when there is a ratio
-            if row['group_reason'] in ['mutant/mutant ratio']:
+            if row['group_reason'] in ['mutant','mutant ratio']:
                 return f'{row["accession"]}_WT'
             # Revert to WT when an additional automatic exception could be included
             elif row['group_reason'] in ['assay', 'ligand']:
@@ -464,20 +464,36 @@ def mutate_sequence(df: pd.DataFrame, sequence_col: str, target_id_col: str, rev
 
     return df
 
+
 def keep_chembl_defined_activity(chembl_df: pd.DataFrame):
     """
-
+    Remove entries with negative activity comments. Keep only entries with either pchembl_value or
+    'active'/'inactive' binary tags.
     :param chembl_df: DataFrame with ChEMBL bioactivity data of interest. It must contain columns of interest:
                     ['assay_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id', 'canonical_smiles']
     :return:
     """
     chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: str(x).lower())
     chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: math.nan if x == 'nan' else x)
-    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: 'active' if x in ['highly active', 'slightly active', 'weakly active', 'partially active'] else x)
-    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: 'inactive' if x in ['not active'] else x)
+    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(
+        lambda x: 'active' if x in ['highly active', 'slightly active', 'weakly active', 'partially active'] else x)
+    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(
+        lambda x: 'inactive' if x in ['not active'] else x)
+
+    # Keep entries with no negative activity comments
+    list_exclude = ['inconclusive', 'unspecified', 'Indeterminate', 'Ineffective', 'Insoluble', 'Insufficient',
+                    'Lack of solubility', 'Not Determined', 'ND(Insoluble)', 'tde', 'not tested', 'uncertain',
+                    'No compound available',
+                    'No compound detectable', 'No data', 'Non valid test', 'Not assayed', 'OUTCOME = Not detected',
+                    'Precipitate', 'Precipitated', 'Precipitates under the conditions of the study', 'Precipitation',
+                    'Qualitative measurement', 'Too insoluble', 'Unable to be measured', 'Unable to calculate']
+
+    chembl_df_good_activity = chembl_df[~chembl_df['activity_comment'].isin(list_exclude)]
 
     # Keep entries that are good for regression or classification tasks
-    chembl_df_defined_activity = chembl_df[(chembl_df['pchembl_value'].notna()) | (chembl_df['activity_comment'].isin(['active','inactive']))]
+    chembl_df_defined_activity = chembl_df_good_activity[
+        (chembl_df_good_activity['pchembl_value'].notna()) | (chembl_df_good_activity['activity_comment']
+                                                              .isin(['active', 'inactive']))]
 
     return chembl_df_defined_activity
 
