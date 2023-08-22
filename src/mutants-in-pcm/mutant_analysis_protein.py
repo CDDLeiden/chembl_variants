@@ -205,12 +205,12 @@ def calculate_average_residue_distance_to_ligand(accession:str, resn:list, commo
 
     if os.path.exists(output_file):
         with open(output_file) as json_file:
-            print('Reading pre-computed results...')
+            print('Reading pre-computed distance results...')
             log_dict = json.load(json_file)
-            print(log_dict)
+            # print(log_dict)
 
             accession_average_dist = log_dict[f'{accession}_average']['distance']
-            print(accession_average_dist)
+            # print(accession_average_dist)
 
     else:
         log_dict = {}
