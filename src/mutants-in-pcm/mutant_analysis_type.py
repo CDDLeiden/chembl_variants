@@ -588,6 +588,7 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
                 return 0
 
     plot_df['mutant_dist'] = plot_df.apply(map_distance_to_mutant, axis=1)
+    print(plot_df.sort_values(by='pchembl_value_Mean', ascending=False))
 
     # Define colors for mutation types, map to color property
     mutation_types = ['conservative', 'polar', 'size', 'charge', 'polar_size', 'charge_size']
