@@ -21,11 +21,11 @@ from sklearn.model_selection import KFold, GroupKFold
 from tqdm.auto import tqdm
 from xgboost import XGBRegressor
 
-from data_path import get_data_path
-from mutant_analysis_accession import filter_accession_data
-from preprocessing import merge_chembl_papyrus_mutants
-from mutant_analysis_common_subsets import get_variant_similar_subset
-from mutant_analysis_accession import get_statistics_across_accessions
+from .data_path import get_data_path
+from .mutant_analysis_accession import filter_accession_data
+from .preprocessing import merge_chembl_papyrus_mutants
+from .mutant_analysis_common_subsets import get_variant_similar_subset
+from .mutant_analysis_accession import get_statistics_across_accessions
 
 def model_bioactivity_data(njobs: int = -1):
     """Model bioactivity data of (i) the entire set of bioactivities and of mutants only.

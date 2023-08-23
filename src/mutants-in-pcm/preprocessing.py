@@ -16,7 +16,8 @@ import os
 from pandas.io.parsers import TextFileReader as PandasTextFileReader
 from papyrus_scripts.utils import IO as papyrusIO
 
-from data_path import get_data_path
+from .data_path import get_data_path
+
 data_dir = get_data_path()
 
 def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: str = None):

@@ -3,8 +3,8 @@ import os
 
 import pandas as pd
 
-from preprocessing import merge_chembl_papyrus_mutants
-from mutant_analysis_common_subsets import compute_stats_per_accession, extract_relevant_targets, compute_variant_activity_distribution, get_variant_similar_subset
+from .preprocessing import merge_chembl_papyrus_mutants
+from .mutant_analysis_common_subsets import compute_stats_per_accession, extract_relevant_targets, compute_variant_activity_distribution, get_variant_similar_subset
 
 
 if __name__ == '__main__':

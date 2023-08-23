@@ -13,8 +13,8 @@ import numpy as np
 import re
 import copy
 
-from preprocessing import merge_chembl_papyrus_mutants
-from mutant_analysis_family import obtain_chembl_family,group_families
+from .preprocessing import merge_chembl_papyrus_mutants
+from .mutant_analysis_family import obtain_chembl_family,group_families
 # from mutant_analysis_clustermaps import read_common_subset,extract_unique_connectivity
 
 # For reference, just Papyrus data

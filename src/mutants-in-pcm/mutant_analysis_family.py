@@ -18,10 +18,10 @@ from textwrap import wrap
 import math
 from math import floor,ceil
 
-from preprocessing import merge_chembl_papyrus_mutants
-from annotation import chembl_annotation
+from .preprocessing import merge_chembl_papyrus_mutants
+from .annotation import chembl_annotation
+from .data_path import get_data_path
 
-from data_path import get_data_path
 data_dir = get_data_path()
 
 def obtain_chembl_family(chembl_version: str, chunksize: int = None, data_folder: str = None):

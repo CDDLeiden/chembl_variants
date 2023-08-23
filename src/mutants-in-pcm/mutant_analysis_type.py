@@ -15,10 +15,10 @@ from Bio.SeqUtils import seq1
 from UniProtMapper import UniProtIDMapper
 mapper = UniProtIDMapper()
 
-from preprocessing import merge_chembl_papyrus_mutants
-from mutant_analysis_protein import calculate_average_residue_distance_to_ligand
+from .preprocessing import merge_chembl_papyrus_mutants
+from .mutant_analysis_protein import calculate_average_residue_distance_to_ligand
 
-from data_path import get_data_path
+from .data_path import get_data_path
 data_dir = get_data_path()
 
 def map_mutation_distance_BLOSUM62(data: pd.DataFrame):

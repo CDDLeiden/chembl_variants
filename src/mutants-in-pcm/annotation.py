@@ -12,9 +12,9 @@ import numpy as np
 import re
 import chembl_downloader
 
-from preprocessing import obtain_chembl_data
+from .preprocessing import obtain_chembl_data
+from .data_path import get_data_path
 
-from data_path import get_data_path
 data_dir = get_data_path()
 
 def filter_assay_data(chembl_df: pd.DataFrame):

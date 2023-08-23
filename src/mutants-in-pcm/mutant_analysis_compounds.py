@@ -36,9 +36,9 @@ rdDepictor.SetPreferCoordGen(True)
 from IPython.display import SVG,Image
 from ipywidgets import interact
 
-from preprocessing import merge_chembl_papyrus_mutants
-from mutant_analysis_accession import filter_accession_data
-from mutant_analysis_common_subsets import compute_variant_activity_distribution, get_variant_common_subset, define_consistent_palette
+from .preprocessing import merge_chembl_papyrus_mutants
+from .mutant_analysis_accession import filter_accession_data
+from .mutant_analysis_common_subsets import compute_variant_activity_distribution, get_variant_common_subset, define_consistent_palette
 
 
 def GetRingSystems(mol, includeSpiro: bool = False):
