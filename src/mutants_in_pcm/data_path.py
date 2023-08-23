@@ -7,4 +7,4 @@ def get_data_path():
     if os.path.exists(data_dir):
         return data_dir
     else:
-        print('The data directory does not exist. Please check the path in data_path.py')
+        raise ValueError('The data directory does not exist. Please check the path in data_path.py')
