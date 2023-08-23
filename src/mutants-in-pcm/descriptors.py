@@ -10,6 +10,8 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
+import scipy.spatial.distance as sp
+from sklearn.preprocessing import scale
 from sklearn.decomposition import PCA
 from prodec import ProteinDescriptors, Transform, TransformType
 
@@ -20,7 +22,7 @@ from adjustText import adjust_text
 
 def plot_descriptor_pca(outfile: str, format: str = 'svg', only_first_pcs: Optional[int] = 2,
                         descriptors: Optional[List[str]] = (
-                        'ProtFP PCA', 'VHSE', 'Tscale', 'FASGAI', 'BLOSUM', 'MS-WHIM', 'STscale',
+                        'ProtFP PCA', 'VHSE', 'Tscale', 'FASGAI', 'VARIMAX', 'MS-WHIM', 'STscale',
                         'Zscale Sandberg')) -> None:
     """Create a PCA projection plot of the
     different descriptors available in ProDEC.
@@ -50,28 +52,17 @@ def plot_descriptor_pca(outfile: str, format: str = 'svg', only_first_pcs: Optio
             continue
         desc_values = pd.DataFrame(np.array(desc.get('ACDEFGHIKLMNPQRSTVWY', flatten=False)), index=list('ACDEFGHIKLMNPQRSTVWY'), columns=range(1, desc.Size + 1))
         # Scale values
-        if desc_values.squeeze().ndim == 1:
-            desc_values.loc[:, :] = (desc_values.values - desc_values.values.mean()) / desc_values.values.std()
-        else:
-            desc_values.loc[:, :] = (desc_values.values - desc_values.values.mean(axis=1)[:,
-                                                          None]) / desc_values.values.std(axis=1)[:, None]
+        desc_values.iloc[:, :] = (desc_values.iloc[:, :] - desc_values.iloc[:, :].min().min()) / (desc_values.iloc[:, :].max().max() - desc_values.iloc[:, :].min().min())
+        # Keep first PCs
+        if desc_values.squeeze().ndim > 1:
             if only_first_pcs is not None and isinstance(only_first_pcs, int) and only_first_pcs > 0:
                 desc_values = desc_values.iloc[:, :only_first_pcs]
             elif only_first_pcs is not None:
                 raise ValueError('only_first_pcs must be a positive integer')
-        # Transform to dict
-        desc_values = {aa: list(dict_.values()) for aa, dict_ in desc_values.to_dict('index').items()}
-        # Create similarity matrix
-        sim_matrix = np.zeros((20, 20))
-        aa_index = dict(k[::-1] for k in enumerate('ACDEFGHIKLMNPQRSTVWY')) # Map A to 0, C to 1, ...
-        for aa1, aa2 in combinations('ACDEFGHIKLMNPQRSTVWY', r=2):
-            # Obtain scaled values
-            aa1_value, aa2_value = np.array(desc_values[aa1]), np.array(desc_values[aa2])
-            # Determine Euclidean distance
-            dist = np.linalg.norm(aa1_value - aa2_value)
-            sim_matrix[aa_index[aa1], aa_index[aa2]] = sim_matrix[aa_index[aa2], aa_index[aa1]] = dist
         # Minmax-scale matrix
-        sim_matrix = (sim_matrix - sim_matrix.min()) / (sim_matrix.max() - sim_matrix.min())
+        desc_values.iloc[:, :] = (desc_values - np.mean(desc_values.values)) / np.std(desc_values.values)
+        # Create similarity matrix with euclidean distance
+        sim_matrix = sp.squareform(sp.pdist(desc_values.values))
         data[descriptor_name] = sim_matrix
     # Calculate difference between pairs of descriptors
     desc_dist_avg = np.zeros((len(data), len(data)))
@@ -80,7 +71,7 @@ def plot_descriptor_pca(outfile: str, format: str = 'svg', only_first_pcs: Optio
     for desc_pair in combinations(desc_names, r=2):
         desc1, desc2 = desc_pair[0], desc_pair[1]
         desc1_ix, desc2_ix = desc_names.index(desc1), desc_names.index(desc2)
-        diff = data[desc1] - data[desc2]
+        diff = np.linalg.norm(data[desc1] - data[desc2])
         desc_dist_avg[desc1_ix, desc2_ix] = desc_dist_avg[desc2_ix, desc1_ix] = diff.mean()
         desc_dist_std[desc1_ix, desc2_ix] = desc_dist_std[desc2_ix, desc1_ix] = diff.std()
     # Save avg and std values to files
@@ -93,18 +84,34 @@ def plot_descriptor_pca(outfile: str, format: str = 'svg', only_first_pcs: Optio
                delimiter='\t',
                encoding='utf-8')
     # Carry out PCA
+    # scaler = StandardScaler()
     pca = PCA(n_components=2, random_state=1234)
-    pca_values = pca.fit_transform(desc_dist_avg)
+    desc_dist_avg = (desc_dist_avg - np.mean(desc_dist_avg)) / np.std(desc_dist_avg)
+    desc_dist_avg = pd.DataFrame(desc_dist_avg, columns=desc_names, index=desc_names)
+    pca.fit(desc_dist_avg[desc_dist_avg.index.isin((
+                        'ProtFP PCA', 'VHSE', 'Tscale', 'FASGAI', 'VARIMAX', 'MS-WHIM', 'STscale',
+                        'Zscale Sandberg')) & desc_dist_avg.columns.isin((
+                        'ProtFP PCA', 'VHSE', 'Tscale', 'FASGAI', 'VARIMAX', 'MS-WHIM', 'STscale',
+                        'Zscale Sandberg'))])
+    # pca_values = pca.fit_transform(desc_dist_avg)
+    pca_values = pca.transform(desc_dist_avg)
 
     # Plot distances
     sns.set_style("whitegrid")
     sns.set(font_scale=1.5, rc={'text.usetex': True})
     fig, ax = plt.subplots(figsize=(15, 8), dpi=300)
-    plot = sns.scatterplot(x=pca_values[:, 0], y=pca_values[:, 1], ax=ax)
-    plot.set(xlabel=rf'PC1 ({pca.explained_variance_ratio_[0] * 100:.2f}\%)', ylabel=rf'PC2 ({pca.explained_variance_ratio_[1] * 100:.2f}\%)')
-    texts = [plt.text(x, y, name, ha='center', va='center') for name, x, y in zip(desc_names, pca_values[:, 0], pca_values[:, 1])]
+    plot = sns.scatterplot(x=-pca_values[:, 0], y=pca_values[:, 1], ax=ax)
+    x_min, x_max = plot.get_xlim()
+    y_min, y_max = plot.get_ylim()
+    plot.set(xlabel=rf'$PC1$ $({pca.explained_variance_ratio_[0] * 100:.2f}\%)$',
+             ylabel=rf'$PC2$ $({pca.explained_variance_ratio_[1] * 100:.2f}\%)$',
+             xlim=(x_min * 2, x_max * 2),
+             ylim=(y_min * 2, y_max * 2)
+             )
+    texts = [plt.text(-x, y, f'${name}$'.replace('ö', r'\ddot{o}')) for name, x, y in zip(desc_names, pca_values[:, 0], pca_values[:, 1])]
     adjust_text(texts, x=pca_values[:, 0], y=pca_values[:, 1], arrowprops=dict(arrowstyle='-', color='black', lw=0.5),
-                # expand_text=(2., 2.),
-                expand_points=(2., 2.),
-                force_text=0.5, lim=1_000)
+                # expand_points=(100., 100.),
+                # expand_text=(10., 10.),
+                force_text=1,
+                lim=10_000)
     plot.get_figure().savefig(outfile, format=format)

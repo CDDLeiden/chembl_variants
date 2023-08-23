@@ -16,24 +16,29 @@ import os
 from pandas.io.parsers import TextFileReader as PandasTextFileReader
 from papyrus_scripts.utils import IO as papyrusIO
 
+from .data_path import get_data_path
+
+data_dir = get_data_path()
 
 def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: str = None):
     """Obtain assay descriptions and bioactivities annotated for mutants from ChEMBL using chembl-downloader.
 
     :param chembl_version: version of chembl to work with
     :param chunksize: size of chunks of data to be used (default: None)
-    param data_folder: path to the folder in which the ChEMBL
+    :param data_folder: path to the folder in which the ChEMBL
     SQLite database is located or will be downloaded (default:
     pystow's default directory)
     """
     if data_folder is not None:
         os.environ['PYSTOW_HOME'] = data_folder
 
-    chembl_file = '../../data/chembl_data.csv'
+    chembl_file = os.path.join(data_dir, f'chembl{chembl_version}_data.csv')
     if not os.path.isfile(chembl_file):
 
         query = """
-            SELECT assays.description,assays.assay_id,assays.variant_id,assays.chembl_id,assays.assay_organism,
+            SELECT assays.description,assays.assay_id,assays.variant_id,assays.chembl_id as 'assay_chembl_id',
+                assays.assay_organism,
+                docs.year,docs.abstract,
                 variant_sequences.mutation,
                 activities.activity_id,activities.pchembl_value,activities.standard_type,activities.activity_comment,
                 molecule_dictionary.chembl_id,compound_structures.canonical_smiles,
@@ -41,6 +46,7 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
             FROM assays
                 LEFT JOIN activities USING (assay_id)
                 LEFT JOIN variant_sequences USING (variant_id)
+                LEFT JOIN docs USING (doc_id)
                 INNER JOIN molecule_dictionary
                     ON activities.molregno = molecule_dictionary.molregno
                 INNER JOIN compound_structures
@@ -163,38 +169,49 @@ def _chunked_keep_papyrus_mutants(data: Union[PandasTextFileReader, Iterator], s
         yield _keep_targets_with_mutants(chunk,source)
 
 
-def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int, predefined_variants: bool = False):
+def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int,
+                                   annotation_round:int, predefined_variants: bool = False):
     """
     Combine datasets with ChEMBL and Papyrus mutants. Include also WT data for targets with at least one variant defined.
     Filter out only targets with no variants defined.
-    :param chembl_mutants:
-    :param papyrus_mutants:
-    :return:
+    :param chembl_version: ChEMBL version
+    :param papyrus_version: Papyrus version
+    :param papyrus_flavor: Papyrus flavor (nostereo_pp, nostereo, stereo)
+    :param chunksize: number of rows to read at a time
+    :param annotation_round: round of annotation following further curation
+    :param predefined_variants: whether to use ChEMBL pre-defined variants
     """
     if predefined_variants:
-        file_name = f'../../data/chembl{chembl_version}_papyrus{papyrus_version}{papyrus_flavor}_data_with_mutants.csv'
+        file_name = os.path.join(data_dir,f'chembl{chembl_version}_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
     else:
-        file_name = f'../../data/chembl{chembl_version}-annotated_papyrus{papyrus_version}{papyrus_flavor}_data_with_mutants.csv'
+        file_name = os.path.join(data_dir,f'chembl{chembl_version}-annotated_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
 
     if not os.path.exists(file_name):
         from annotation import chembl_annotation
         # Get ChEMBL data and extract mutants
-        chembl_annotated = chembl_annotation(chembl_version)
+        chembl_annotated = chembl_annotation(chembl_version, annotation_round)
         chembl_annotated['source'] = f'ChEMBL{chembl_version}'
         chembl_with_mutants = _keep_targets_with_mutants(chembl_annotated, f'ChEMBL{chembl_version}', predefined_variants)
         # Rename columns so they match Papyrus
-        dict_rename = {'chembl_id':'CID','assay_id':'AID','canonical_smiles':'SMILES'}
+        dict_rename = {'chembl_id':'CID','assay_id':'AID','canonical_smiles':'SMILES','year':'Year'}
         chembl_with_mutants.rename(dict_rename, axis=1, inplace=True)
         # Add connectivity ID to identify compounds
         PandasTools.AddMoleculeColumnToFrame(chembl_with_mutants, 'SMILES', 'Molecule', includeFingerprints=False)
         chembl_with_mutants['connectivity'] = chembl_with_mutants['Molecule'].apply(lambda x: Chem.MolToInchiKey(x).split('-')[0])
 
         # Keep common subset of columns
-        chembl_with_mutants = chembl_with_mutants[['CID', 'connectivity', 'target_id', 'AID', 'accession', 'pchembl_value_Mean', 'SMILES', 'sequence', 'source', 'Activity_class']]
+        chembl_with_mutants = chembl_with_mutants[['CID', 'connectivity', 'target_id', 'AID', 'accession',
+                                                   'pchembl_value_Mean', 'SMILES', 'sequence', 'source',
+                                                   'Activity_class', 'Year']]
 
         # Get Papyrus data with annotated mutants
         papyrus_with_mutants = obtain_papyrus_data(papyrus_version, papyrus_flavor, chunksize)
         papyrus_with_mutants['source'] = papyrus_with_mutants['source'].apply(lambda x: f'Papyrus{papyrus_version}_{x}')
+        # Make sure that all mutations in a variant are ordered by position
+        papyrus_with_mutants['target_id'] = papyrus_with_mutants['target_id'].apply(
+            lambda x: f"{x.split('_')[0]}_{'_'.join(sorted(x.split('_')[1:], key=lambda y: y[1:-1], reverse=False))}")
         # Add sequence data from protein data file
         sequences = papyrus_scripts.read_protein_set(version=papyrus_version)[['target_id', 'Sequence']].rename(
             {'Sequence': 'sequence'}, axis=1)
@@ -202,7 +219,9 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
         # Filter out all ChEMBL related data from Papyrus set to avoid duplicates
         papyrus_with_mutants_nochembl = papyrus_with_mutants[~papyrus_with_mutants['source'].str.contains('ChEMBL')]
         # Keep common subset of columns
-        papyrus_with_mutants_nochembl = papyrus_with_mutants_nochembl[['CID', 'connectivity','target_id', 'AID', 'accession', 'pchembl_value_Mean', 'SMILES', 'sequence', 'source', 'Activity_class']]
+        papyrus_with_mutants_nochembl = papyrus_with_mutants_nochembl[['CID', 'connectivity','target_id', 'AID',
+                                                                       'accession', 'pchembl_value_Mean', 'SMILES',
+                                                                       'sequence', 'source', 'Activity_class', 'Year']]
 
         # Concatenate ChEMBL and papyrus data and write file
         chembl_papyrus_with_mutants = pd.concat((chembl_with_mutants, papyrus_with_mutants_nochembl), axis=0, ignore_index=True)
@@ -214,5 +233,83 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
 
     return chembl_papyrus_with_mutants
 
+def annotate_uniprot_metadata(data: pd.DataFrame, papyrus_version: str):
+    """
+    Add Uniprot metadata to bioactivity dataset (Organism, gene name)
+    :param data: bioactivity dataset with accession column
+    :param papyrus_version: Papyrus version
+    :return: pd.DataFrame annotated
+    """
+    # Read Papyrus protein dataset
+    papyrus_proteins = papyrus_scripts.read_protein_set(version=papyrus_version)
+
+    # Map Uniprot metadata based on accession (not target_id because not all mutants are annotated in Papyrus)
+    papyrus_proteins['accession'] = papyrus_proteins['target_id'].apply(lambda x: x.split('_')[0])
+    papyrus_proteins.drop_duplicates(subset='accession', inplace=True)
+    mapping_df = papyrus_proteins[['accession', 'UniProtID', 'Organism', 'HGNC_symbol']]
+
+    data_mapped = data.merge(mapping_df, how='left', on='accession')
+
+    return data_mapped
+
+def calculate_mean_activity_chembl_papyrus(data: pd.DataFrame):
+    """
+    From a dataset with concatenated ChEMBL and Papyrus entries, compute mean pchembl_value for the same target_id-connectivity pair
+    :param data: DataFrame with activity data
+    :return: DataFrame with unique activity datapoints per target_id - connectivity pair
+    """
+    def agg_functions_variant_connectivity(x):
+        d ={}
+        d['pchembl_value_Mean'] = x['pchembl_value_Mean'].mean()
+        d['Activity_class_consensus'] = x['Activity_class'].mode()
+        d['source'] = ';'.join(list(set(list(x['source']))))
+        d['SMILES'] = list(x['SMILES'])[0]
+        d['CID'] = list(x['CID'])[0]
+        d['accession'] = list(x['accession'])[0]
+        d['sequence'] = list(x['sequence'])[0]
+        d['Year'] = min(x['Year']) # Keep first year when the compound was tested
+
+        return pd.Series(d, index=['pchembl_value_Mean', 'Activity_class_consensus', 'source', 'SMILES', 'CID',
+                                   'accession', 'sequence', 'Year'])
+
+    agg_activity_data = data.groupby(['target_id','connectivity'], as_index=False).apply(agg_functions_variant_connectivity)
+
+    return agg_activity_data
+
+def merge_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int,
+                                 annotation_round: int,predefined_variants: bool = False):
+    """
+    Create a dataset with targets with at least one annotated variant from ChEMBL and Papyrus. Merge datasets for
+    connectivity-target_id pairs if data available from both sources.
+    :param chembl_version: ChEMBL version
+    :param papyrus_version: Papyrus version
+    :param papyrus_flavor: Papyrus flavor (nostereo_pp, nostereo, stereo)
+    :param chunksize: number of rows to read at a time
+    :param annotation_round: round of annotation following further curation
+    :param predefined_variants: whether to use ChEMBL pre-defined variants
+    """
+    if predefined_variants:
+        file_name = os.path.join(data_dir,f'merged_chembl{chembl_version}_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
+    else:
+        file_name = os.path.join(data_dir,f'merged_chembl{chembl_version}-annotated_papyrus{papyrus_version}' \
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
+
+    if not os.path.exists(file_name):
+        chembl_papyrus_with_mutants = combine_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor,
+                                                                     chunksize, annotation_round, predefined_variants)
+
+        agg_activity_data_not_annotated = calculate_mean_activity_chembl_papyrus(chembl_papyrus_with_mutants)
+
+        # Annotate Uniprot metadata
+        agg_activity_data = annotate_uniprot_metadata(agg_activity_data_not_annotated, papyrus_version)
+
+        agg_activity_data.to_csv(file_name, sep='\t', index=False)
+
+    else:
+        agg_activity_data = pd.read_csv(file_name, sep='\t')
+
+    return agg_activity_data
+
 if __name__ == "__main__":
-    combine_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000)
+    merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round=1, predefined_variants=False)
