@@ -92,7 +92,7 @@ def model_bioactivity_data(njobs: int = -1):
             # 1) Isolate IDs and dependent variable
             ids = accession_data[['connectivity', 'target_id', 'pchembl_value_Mean']]
             # 2) Keep unique mols and prots
-            mols = accession_data[['connectivity', 'SMILES']].drop_duplicates()
+            mols = accession_data[['connectivity', 'SMILES']].drop_duplicates(subset=['connectivity'])
             prots = accession_data[['target_id', 'sequence']].drop_duplicates()
             # 3) Obtain Mold2 descriptors for unique mols
             mdesc_type = Mold2(False)
