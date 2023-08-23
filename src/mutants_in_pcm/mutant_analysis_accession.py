@@ -15,7 +15,7 @@ import copy
 
 from .preprocessing import merge_chembl_papyrus_mutants
 from .mutant_analysis_family import obtain_chembl_family,group_families
-# from mutant_analysis_clustermaps import read_common_subset,extract_unique_connectivity
+# from .mutant_analysis_clustermaps import read_common_subset,extract_unique_connectivity
 
 # For reference, just Papyrus data
 def filter_explore_activity_data(papyrus_version, target_accession_list):
