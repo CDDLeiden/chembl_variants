@@ -49,9 +49,9 @@ def model_bioactivity_data(njobs: int = -1):
     data = merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round=2)
     # Obtain statistics per accession
     get_statistics_across_accessions('31', '05.5', 'nostereo', 1_000_000,
-                                     1, DATA_DIR, True)
+                                     1, DATADIR, True)
     get_statistics_across_accessions('31', '05.5', 'nostereo', 1_000_000,
-                                     2, DATA_DIR, True)
+                                     2, DATADIR, True)
     # Model accessions by decreasing number of datapoints
     sorted_accessions = list(zip(*sorted(Counter(data.accession).items(), key=itemgetter(1), reverse=True)))[0]
     pbar = tqdm(sorted_accessions)
