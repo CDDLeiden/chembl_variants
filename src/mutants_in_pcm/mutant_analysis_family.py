@@ -22,7 +22,6 @@ from .preprocessing import merge_chembl_papyrus_mutants
 from .annotation import chembl_annotation
 from .data_path import get_data_path
 
-data_dir = get_data_path()
 
 def obtain_chembl_family(chembl_version: str, chunksize: int = None, data_folder: str = None):
     """Obtain family classifications (levels L1-L5) from ChEMBL using chembl-downloader.
@@ -37,6 +36,7 @@ def obtain_chembl_family(chembl_version: str, chunksize: int = None, data_folder
     if data_folder is not None:
         os.environ['PYSTOW_HOME'] = data_folder
 
+    data_dir = get_data_path()
     chembl_file = os.path.join(data_dir,f'chembl{chembl_version}_families.csv')
     if not os.path.isfile(chembl_file):
 

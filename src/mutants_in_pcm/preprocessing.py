@@ -18,7 +18,6 @@ from papyrus_scripts.utils import IO as papyrusIO
 
 from .data_path import get_data_path
 
-data_dir = get_data_path()
 
 def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: str = None):
     """Obtain assay descriptions and bioactivities annotated for mutants from ChEMBL using chembl-downloader.
@@ -32,6 +31,7 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
     if data_folder is not None:
         os.environ['PYSTOW_HOME'] = data_folder
 
+    data_dir = get_data_path()
     chembl_file = os.path.join(data_dir, f'chembl{chembl_version}_data.csv')
     if not os.path.isfile(chembl_file):
 
@@ -181,6 +181,7 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
     :param annotation_round: round of annotation following further curation
     :param predefined_variants: whether to use ChEMBL pre-defined variants
     """
+    data_dir = get_data_path()
     if predefined_variants:
         file_name = os.path.join(data_dir,f'chembl{chembl_version}_papyrus{papyrus_version}' \
                     f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
@@ -288,6 +289,7 @@ def merge_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papy
     :param annotation_round: round of annotation following further curation
     :param predefined_variants: whether to use ChEMBL pre-defined variants
     """
+    data_dir = get_data_path()
     if predefined_variants:
         file_name = os.path.join(data_dir,f'merged_chembl{chembl_version}_papyrus{papyrus_version}' \
                     f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')

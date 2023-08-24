@@ -25,7 +25,6 @@ from rdkit.Chem.Fingerprints import FingerprintMols
 from .preprocessing import merge_chembl_papyrus_mutants
 from .data_path import get_data_path
 
-data_dir = get_data_path()
 
 def compute_stats_per_accession(data: pd.DataFrame):
     """
@@ -76,6 +75,7 @@ def compute_pairwise_similarity(data: pd.DataFrame):
     :param data: DataFrame with activity data
     :return: dataframe with similarity values for all pairs of compounds
     """
+    data_dir = get_data_path()
     out_file = os.path.join(data_dir,'similarity_matrix.csv')
     if not os.path.exists(out_file):
         unique_compounds = data.drop_duplicates('connectivity', keep='first')[['connectivity','SMILES']]
