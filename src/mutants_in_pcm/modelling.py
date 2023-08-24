@@ -54,7 +54,7 @@ def model_bioactivity_data(njobs: int = -1):
                                      2, DATADIR, True)
     # Model accessions by decreasing number of datapoints
     sorted_accessions = list(zip(*sorted(Counter(data.accession).items(), key=itemgetter(1), reverse=True)))[0]
-    pbar = tqdm(sorted_accessions)
+    pbar = tqdm(sorted_accessions, smoothing=0.0, ncols=90)
     for accession in pbar:
         # Determine names of all output files
         out_file_pcm_random_tsv = os.path.join(path, f'pcm_randomsplit_{accession}.tsv')
@@ -78,12 +78,13 @@ def model_bioactivity_data(njobs: int = -1):
         all_files = list(chain(out_pcm_mutants, out_pcm_no_mutants, out_qsar_mutants, out_qsar_no_mutants))
         # Skip if all output files already exists
         if all(os.path.exists(f) for f in all_files):
+            pbar.update()
             continue
-        # Set description of progress bar
-        pbar.desc = accession
-        pbar.refresh()
         # Obtain data for this accession only
         accession_data = filter_accession_data(data, accession)
+        # Set description of progress bar
+        pbar.desc = f'{accession} - {accession_data.shape[0]} data points'
+        pbar.refresh()
         mol_descs = None
         prot_descs = None
         # Run PCM if not any missing output file
@@ -111,7 +112,7 @@ def model_bioactivity_data(njobs: int = -1):
             prots = prots.loc[validity, :]
             if len(prots) > 0:
                 # Obtain domain averages
-                prot_descs = pdesc_type.pandas_get(prots.sequence, domains=50)
+                prot_descs = pdesc_type.pandas_get(prots.sequence, domains=50, quiet=True)
                 prot_descs = prot_descs.apply(lambda x: pd.to_numeric(x, errors='coerce'))
                 prot_descs = pd.concat([prots.target_id.reset_index(drop=True),
                                         prot_descs.reset_index(drop=True)
@@ -128,12 +129,13 @@ def model_bioactivity_data(njobs: int = -1):
                     # Random cross-validation
                     kfold = KFold(n_splits=5, shuffle=True, random_state=1234)
                     model_pcm = XGBRegressor()
-                    cv_metrics, cv_models = crossvalidate_model(pcm_data, model_pcm, kfold)
+                    cv_metrics, cv_models = crossvalidate_model(pcm_data, model_pcm, kfold, verbose=False)
                     # Leave-one-out mutant cross-validation
                     model_pcm = XGBRegressor()
                     if len(prots.target_id) > 1:
                         gkfolds = GroupKFold(n_splits=len(pcm_target_ids.unique()))
-                        loo_metrics, loo_models = crossvalidate_model(pcm_data, model_pcm, gkfolds, pcm_target_ids)
+                        loo_metrics, loo_models = crossvalidate_model(pcm_data, model_pcm, gkfolds, pcm_target_ids,
+                                                                      verbose=False)
                     else:
                         loo_metrics, loo_models = pd.DataFrame(), {}
                     # Save performances
@@ -174,12 +176,13 @@ def model_bioactivity_data(njobs: int = -1):
                 # Random cross-validation
                 kfold = KFold(n_splits=5, shuffle=True, random_state=1234)
                 model_qsar_all = XGBRegressor()
-                cv_metrics, cv_models = crossvalidate_model(qsar_data, model_qsar_all, kfold)
+                cv_metrics, cv_models = crossvalidate_model(qsar_data, model_qsar_all, kfold, verbose=False)
                 # LOO motant-cross-validation
                 model_qsar_all = XGBRegressor()
                 if len(prots.target_id) > 1:
                     gkfolds = GroupKFold(n_splits=len(qsar_target_ids.unique()))
-                    loo_metrics, loo_models = crossvalidate_model(qsar_data, model_qsar_all, gkfolds, qsar_target_ids)
+                    loo_metrics, loo_models = crossvalidate_model(qsar_data, model_qsar_all, gkfolds, qsar_target_ids,
+                                                                  verbose=False)
                 else:
                     loo_metrics, loo_models = pd.DataFrame(), {}
                 # Save performances
@@ -216,7 +219,7 @@ def model_bioactivity_data(njobs: int = -1):
                 prots = prots.loc[validity, :]
                 if len(prots) > 0:
                     # Obtain domain averages
-                    prot_descs = pdesc_type.pandas_get(prots.sequence, domains=50)
+                    prot_descs = pdesc_type.pandas_get(prots.sequence, domains=50, quiet=True)
                     prot_descs = prot_descs.apply(lambda x: pd.to_numeric(x, errors='coerce'))
                     prot_descs = pd.concat([prots.target_id.reset_index(drop=True),
                                             prot_descs.reset_index(drop=True)
@@ -241,7 +244,7 @@ def model_bioactivity_data(njobs: int = -1):
                     # Random cross-validation
                     kfold = KFold(n_splits=5, shuffle=True, random_state=1234)
                     model_pcm = XGBRegressor()
-                    cv_metrics, cv_models = crossvalidate_model(pcm_data, model_pcm, kfold)
+                    cv_metrics, cv_models = crossvalidate_model(pcm_data, model_pcm, kfold, verbose=False)
                     # Save performances
                     cv_metrics.to_csv(out_file_pcm_nomutant_random_tsv, sep='\t')
                     # Save models to json
@@ -281,7 +284,7 @@ def model_bioactivity_data(njobs: int = -1):
                 # Random cross-validation
                 kfold = KFold(n_splits=5, shuffle=True, random_state=1234)
                 model_qsar_all = XGBRegressor()
-                cv_metrics, cv_models = crossvalidate_model(qsar_data, model_qsar_all, kfold)
+                cv_metrics, cv_models = crossvalidate_model(qsar_data, model_qsar_all, kfold, verbose=False)
                 # Save performances
                 cv_metrics.to_csv(out_file_qsar_nomutant_random_tsv, sep='\t')
                 # Save models to json
@@ -320,7 +323,7 @@ def model_bioactivity_data_common_subsets(njobs: int = -1):
     datasets = [(common_set, os.path.basename(common_set)[os.path.basename(common_set).find('modelling_dataset_') +18:].replace('_Thr2_Cov20_Sim80.csv', ''))
                 for common_set in glob.glob(os.path.join(DATADIR, '**Cov20_Sim80', '*.csv'))]
     if not len(datasets):
-        # Obtain common subset
+        # Obtain common subsets
         pbar = tqdm(data.accession.unique(), desc='Calculating common subsets')
         for accession in pbar:
             get_variant_similar_subset(data, accession, sim_thres=0.8, threshold=2, variant_coverage=0.2,
@@ -330,10 +333,11 @@ def model_bioactivity_data_common_subsets(njobs: int = -1):
         if not len(datasets):
             raise RuntimeError('Error while computing common subsets.')
     # Model bioactivities of common subsets
-    pbar = tqdm(datasets)
+    pbar = tqdm(datasets, smoothing=0.0, ncols=90)
     for common_set, accession in pbar:
         accession_data = pd.read_csv(common_set, sep='\t')
         if accession_data.empty:
+            pbar.update()
             continue
         # Determine names of all output files
         out_file_pcm_random_tsv = os.path.join(path, f'pcm_common_subset_randomsplit_{accession}.tsv')
@@ -357,9 +361,10 @@ def model_bioactivity_data_common_subsets(njobs: int = -1):
         all_files = list(chain(out_pcm_mutants, out_pcm_no_mutants, out_qsar_mutants, out_qsar_no_mutants))
         # Skip if all files already exists
         if all(os.path.exists(f) for f in all_files):
+            pbar.update()
             continue
         # Set description of progress bar
-        pbar.desc = accession
+        pbar.desc = f'{accession} - {accession_data.shape[0]} common data points'
         pbar.refresh()
         mol_descs = None
         prot_descs = None
@@ -386,7 +391,7 @@ def model_bioactivity_data_common_subsets(njobs: int = -1):
             prots = prots.loc[validity, :]
             if len(prots) > 0:
                 # Obtain domain averages
-                prot_descs = pdesc_type.pandas_get(prots.sequence, domains=50)
+                prot_descs = pdesc_type.pandas_get(prots.sequence, domains=50, quiet=True)
                 prot_descs = prot_descs.apply(lambda x: pd.to_numeric(x, errors='coerce'))
                 prot_descs = pd.concat([prots.target_id.reset_index(drop=True),
                                         prot_descs.reset_index(drop=True)
@@ -403,12 +408,13 @@ def model_bioactivity_data_common_subsets(njobs: int = -1):
                     # Random cross-validation
                     kfold = KFold(n_splits=5, shuffle=True, random_state=1234)
                     model_pcm = XGBRegressor()
-                    cv_metrics, cv_models = crossvalidate_model(pcm_data, model_pcm, kfold)
+                    cv_metrics, cv_models = crossvalidate_model(pcm_data, model_pcm, kfold, verbose=False)
                     # LOO mutant CV
                     model_pcm = XGBRegressor()
                     if len(prots.target_id) > 1:
                         gkfolds = GroupKFold(n_splits=len(pcm_target_ids.unique()))
-                        grouped_metrics, grouped_models = crossvalidate_model(pcm_data, model_pcm, gkfolds, pcm_target_ids)
+                        grouped_metrics, grouped_models = crossvalidate_model(pcm_data, model_pcm, gkfolds, pcm_target_ids,
+                                                                              verbose=False)
                     else:
                         grouped_metrics, grouped_models = pd.DataFrame(), {}
                     # Save performances
@@ -448,12 +454,13 @@ def model_bioactivity_data_common_subsets(njobs: int = -1):
                 # Random CV
                 kfold = KFold(n_splits=5, shuffle=True, random_state=1234)
                 model_qsar_all = XGBRegressor()
-                cv_metrics, cv_models = crossvalidate_model(qsar_data, model_qsar_all, kfold)
+                cv_metrics, cv_models = crossvalidate_model(qsar_data, model_qsar_all, kfold, verbose=False)
                 # LOO mutant CV
                 model_qsar_all = XGBRegressor()
                 if len(prots.target_id) > 1:
                     gkfolds = GroupKFold(n_splits=len(qsar_target_ids.unique()))
-                    grouped_metrics, grouped_models = crossvalidate_model(qsar_data, model_qsar_all, gkfolds, qsar_target_ids)
+                    grouped_metrics, grouped_models = crossvalidate_model(qsar_data, model_qsar_all, gkfolds, qsar_target_ids,
+                                                                          verbose=False)
                 else:
                     grouped_metrics, grouped_models = pd.DataFrame(), {}
                 # Save performances
@@ -490,7 +497,7 @@ def model_bioactivity_data_common_subsets(njobs: int = -1):
                 prots = prots.loc[validity, :]
                 if len(prots) > 0:
                     # Obtain domain averages
-                    prot_descs = pdesc_type.pandas_get(prots.sequence, domains=50)
+                    prot_descs = pdesc_type.pandas_get(prots.sequence, domains=50, quiet=True)
                     prot_descs = prot_descs.apply(lambda x: pd.to_numeric(x, errors='coerce'))
                     prot_descs = pd.concat([prots.target_id.reset_index(drop=True),
                                             prot_descs.reset_index(drop=True)
@@ -515,7 +522,7 @@ def model_bioactivity_data_common_subsets(njobs: int = -1):
                     # Random CV
                     kfold = KFold(n_splits=5, shuffle=True, random_state=1234)
                     model_pcm = XGBRegressor()
-                    cv_metrics, cv_models = crossvalidate_model(pcm_data, model_pcm, kfold)
+                    cv_metrics, cv_models = crossvalidate_model(pcm_data, model_pcm, kfold, verbose=False)
                     # Save performances
                     cv_metrics.to_csv(out_file_pcm_nomutant_random_tsv, sep='\t')
                     # Save models to json
@@ -555,7 +562,7 @@ def model_bioactivity_data_common_subsets(njobs: int = -1):
                 # Random CV
                 kfold = KFold(n_splits=5, shuffle=True, random_state=1234)
                 model_qsar_all = XGBRegressor()
-                cv_metrics, cv_models = crossvalidate_model(qsar_data, model_qsar_all, kfold)
+                cv_metrics, cv_models = crossvalidate_model(qsar_data, model_qsar_all, kfold, verbose=False)
                 # Save performances
                 cv_metrics.to_csv(out_file_qsar_nomutant_random_tsv, sep='\t')
                 # Save models to json
