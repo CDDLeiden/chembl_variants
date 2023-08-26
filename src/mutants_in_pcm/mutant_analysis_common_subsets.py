@@ -783,7 +783,7 @@ def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: 
 
     print(f'{len(accession_keep)} targets satisfy the specified conditions:')
     if error_mean_limit == 'min':
-        print(stat_df_keep.groupby(['accession'])['n_accession', 'mean_error'].apply(lambda x: x.abs().max()))
+        print(stat_df_keep.groupby(['accession'])[['n_accession', 'mean_error']].apply(lambda x: x.abs().max()))
     elif error_mean_limit == 'max':
         print(stat_df_keep[stat_df_keep['mean_error'] != 0].groupby(['accession'])['n_accession', 'mean_error'].
               apply(lambda x: x.abs().min()))
