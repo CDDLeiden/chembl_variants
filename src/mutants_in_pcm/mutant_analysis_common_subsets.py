@@ -21,9 +21,10 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import PandasTools
 from rdkit import DataStructs
 from rdkit.Chem.Fingerprints import FingerprintMols
-from preprocessing import merge_chembl_papyrus_mutants
 
+from .preprocessing import merge_chembl_papyrus_mutants
 from .data_path import get_data_path
+
 data_dir = get_data_path()
 
 def compute_stats_per_accession(data: pd.DataFrame):
