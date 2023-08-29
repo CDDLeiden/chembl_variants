@@ -331,11 +331,14 @@ def plot_circular_barplot_families(annotated_data_families: pd.DataFrame, family
     fig.text(0.1, 0.9, subtitle, fontsize=14, ha="left", va="top")
     # fig.text(0.5, 0.025, caption, fontsize=10, ha="center", va="baseline")
 
-    fig
-
     if save:
         # Save figure
         fig.savefig(os.path.join(output_dir, f'family_stats_{family_level}{figure_tag}.svg'))
+
+    plt.close()
+
+    if save:
+        return os.path.join(output_dir, f'family_stats_{family_level}{figure_tag}.svg')
 
 def plot_circular_barplot_families_newannotations(annotated_data_families: pd.DataFrame, family_level: str,
                                                   output_dir: str, subset_level: str = None, subset_family: str = None,
@@ -572,12 +575,14 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
     fig.text(0.1, 0.9, subtitle, fontsize=14, ha="left", va="top")
     # fig.text(0.5, 0.025, caption, fontsize=10, ha="center", va="baseline")
 
-    fig
-
     if save:
         # Save figure
         fig.savefig(os.path.join(output_dir, f'family_stats_ChEMBLNewAnnotations_{family_level}{figure_tag}.svg'))
 
+    plt.close()
+
+    if save:
+        return os.path.join(output_dir, f'family_stats_ChEMBLNewAnnotations_{family_level}{figure_tag}.svg')
 
 if __name__ == "__main__":
     annotation_round = 1

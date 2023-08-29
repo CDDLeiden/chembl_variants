@@ -54,7 +54,7 @@ def model_bioactivity_data(njobs: int = -1):
                                      2, DATADIR, True)
     # Model accessions by decreasing number of datapoints
     sorted_accessions = list(zip(*sorted(Counter(data.accession).items(), key=itemgetter(1), reverse=True)))[0]
-    pbar = tqdm(sorted_accessions, smoothing=0.0, ncols=90)
+    pbar = tqdm(sorted_accessions, smoothing=0.0, ncols=120)
     for accession in pbar:
         # Determine names of all output files
         out_file_pcm_random_tsv = os.path.join(path, f'pcm_randomsplit_{accession}.tsv')
@@ -333,7 +333,7 @@ def model_bioactivity_data_common_subsets(njobs: int = -1):
         if not len(datasets):
             raise RuntimeError('Error while computing common subsets.')
     # Model bioactivities of common subsets
-    pbar = tqdm(datasets, smoothing=0.0, ncols=90)
+    pbar = tqdm(datasets, smoothing=0.0, ncols=120)
     for common_set, accession in pbar:
         accession_data = pd.read_csv(common_set, sep='\t')
         if accession_data.empty:
@@ -570,7 +570,3 @@ def model_bioactivity_data_common_subsets(njobs: int = -1):
                     json.dump({name: ml2json.serialize_model(model)
                                for name, model in cv_models.items()},
                               oh)
-
-if __name__ == '__main__':
-    model_bioactivity_data()
-    model_bioactivity_data_common_subsets()
