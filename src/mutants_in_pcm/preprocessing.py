@@ -190,7 +190,7 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
                     f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
 
     if not os.path.exists(file_name):
-        from annotation import chembl_annotation
+        from .annotation import chembl_annotation
         # Get ChEMBL data and extract mutants
         chembl_annotated = chembl_annotation(chembl_version, annotation_round)
         chembl_annotated['source'] = f'ChEMBL{chembl_version}'
