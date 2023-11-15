@@ -22,7 +22,6 @@ from .preprocessing import merge_chembl_papyrus_mutants
 from .annotation import chembl_annotation
 from .data_path import get_data_path
 
-data_dir = get_data_path()
 
 def obtain_chembl_family(chembl_version: str, chunksize: int = None, data_folder: str = None):
     """Obtain family classifications (levels L1-L5) from ChEMBL using chembl-downloader.
@@ -37,6 +36,7 @@ def obtain_chembl_family(chembl_version: str, chunksize: int = None, data_folder
     if data_folder is not None:
         os.environ['PYSTOW_HOME'] = data_folder
 
+    data_dir = get_data_path()
     chembl_file = os.path.join(data_dir,f'chembl{chembl_version}_families.csv')
     if not os.path.isfile(chembl_file):
 
@@ -331,11 +331,14 @@ def plot_circular_barplot_families(annotated_data_families: pd.DataFrame, family
     fig.text(0.1, 0.9, subtitle, fontsize=14, ha="left", va="top")
     # fig.text(0.5, 0.025, caption, fontsize=10, ha="center", va="baseline")
 
-    fig
-
     if save:
         # Save figure
         fig.savefig(os.path.join(output_dir, f'family_stats_{family_level}{figure_tag}.svg'))
+
+    plt.close()
+
+    if save:
+        return os.path.join(output_dir, f'family_stats_{family_level}{figure_tag}.svg')
 
 def plot_circular_barplot_families_newannotations(annotated_data_families: pd.DataFrame, family_level: str,
                                                   output_dir: str, subset_level: str = None, subset_family: str = None,
@@ -572,12 +575,14 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
     fig.text(0.1, 0.9, subtitle, fontsize=14, ha="left", va="top")
     # fig.text(0.5, 0.025, caption, fontsize=10, ha="center", va="baseline")
 
-    fig
-
     if save:
         # Save figure
         fig.savefig(os.path.join(output_dir, f'family_stats_ChEMBLNewAnnotations_{family_level}{figure_tag}.svg'))
 
+    plt.close()
+
+    if save:
+        return os.path.join(output_dir, f'family_stats_ChEMBLNewAnnotations_{family_level}{figure_tag}.svg')
 
 if __name__ == "__main__":
     annotation_round = 1
