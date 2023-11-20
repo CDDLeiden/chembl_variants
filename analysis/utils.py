@@ -32,41 +32,35 @@ def update_directories(annotation_round: int, directory_path: str):
     annotation_tag = f'round_{annotation_round}'
     return os.path.join(directory_path, annotation_tag)
 
-def get_distance_path(directories_file):
+def get_distance_path(mutant_analysis_dir):
     """
     Returns the path to the distance directory.
-    :param directories_file:
+    :param mutant_analysis_dir:
     :return:
     """
-    annotation_analysis_dir, mutant_analysis_dir, modeling_dir, modeling_analysis_dir = get_directories(
-        directories_file)
     return os.path.join(mutant_analysis_dir, '2_mutation_type', 'mutation_distances')
 
-def get_annotation_analysis_path(directories_file: str, annotation_round: int):
+def get_annotation_analysis_path(annotation_analysis_dir: str, annotation_round: int):
     """
     Returns the path to the analysis directory for a specific annotation round.
     :param directories_file:
     :param annotation_round:
     :return:
     """
-    annotation_analysis_dir,mutant_analysis_dir, modeling_dir, modeling_analysis_dir = get_directories(
-        directories_file)
     return update_directories(annotation_round, annotation_analysis_dir)
 
-def get_mutant_analysis_path(directories_file: str, analysis_step: str, annotation_round: int):
+def get_mutant_analysis_path(mutant_analysis_dir: str, analysis_step: str, annotation_round: int):
     """
     Returns the path to the analysis directory for a specific analysis step and annotation round.
-    :param directories_file:
+    :param mutant_analysis_dir: directory of the mutant analysis
     :param analysis_step:
     :param annotation_round:
     :return:
     """
-    annotation_analysis_dir, mutant_analysis_dir, modeling_dir, modeling_analysis_dir = get_directories(
-        directories_file)
-
+    mutant_analysis_dir = os.path.abspath(mutant_analysis_dir)
     # Check that mutant analysis directory exists
     if not os.path.exists(mutant_analysis_dir):
-        raise ValueError('The mutant analysis directory does not exist. Please check the directories_file argument.')
+        raise ValueError(f'The mutant analysis directory does not exist: {mutant_analysis_dir}.')
 
     else:
         if analysis_step == 'family':

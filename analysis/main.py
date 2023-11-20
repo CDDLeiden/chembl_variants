@@ -1,4 +1,5 @@
 from utils import *
+from mutants_in_pcm import data_path
 
 # Define ChEMBL and Papyrus versions
 chembl_version = '31'
@@ -9,29 +10,26 @@ papyrus_flavor = 'nostereo'
 annotation_round = 2
 
 # Define directories for this annotation round
-directories_file = './directories.json'
-annotation_dir = get_annotation_analysis_path(directories_file, annotation_round)
-family_analysis_dir = get_mutant_analysis_path(directories_file, 'family', annotation_round)
-accession_analysis_dir = get_mutant_analysis_path(directories_file, 'accession', annotation_round)
-type_analysis_dir = get_mutant_analysis_path(directories_file, 'type', annotation_round)
-common_analysis_dir = get_mutant_analysis_path(directories_file, 'common', annotation_round)
-compound_analysis_dir = get_mutant_analysis_path(directories_file, 'compound', annotation_round)
-bioactivity_analysis_dir = get_mutant_analysis_path(directories_file, 'bioactivity', annotation_round)
-distance_dir = get_distance_path(directories_file)
-
-# Import project path to allow for relative imports
-import project_path
+data_path.data_dir = '../data'
+annotation_dir = get_annotation_analysis_path('0_annotation_analysis', annotation_round)
+family_analysis_dir = get_mutant_analysis_path('1_mutant_statistics', 'family', annotation_round)
+accession_analysis_dir = get_mutant_analysis_path('1_mutant_statistics', 'accession', annotation_round)
+type_analysis_dir = get_mutant_analysis_path('1_mutant_statistics', 'type', annotation_round)
+common_analysis_dir = get_mutant_analysis_path('1_mutant_statistics', 'common', annotation_round)
+compound_analysis_dir = get_mutant_analysis_path('1_mutant_statistics', 'compound', annotation_round)
+bioactivity_analysis_dir = get_mutant_analysis_path('1_mutant_statistics', 'bioactivity', annotation_round)
+distance_dir = get_distance_path('1_mutant_statistics')
 
 ########################################################################################################################
 # Step 1: ChEMBL annotation and combination with non-ChEMBL Papyrus mutants
-from preprocessing import merge_chembl_papyrus_mutants
+from mutants_in_pcm.preprocessing import merge_chembl_papyrus_mutants
 print('Annotating and merging ChEMBL and Papyrus mutants...')
 annotated_data = merge_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor, 1_000_000,
                                               annotation_round, predefined_variants=False)
 print('Done.')
 ########################################################################################################################
 # Step 2: Compute statistics per protein (accession) and variant (target_id)
-from mutant_analysis_accession import get_statistics_across_accessions,get_statistics_across_variants
+from mutants_in_pcm.mutant_analysis_accession import get_statistics_across_accessions,get_statistics_across_variants
 print('Computing statistics per protein and variant...')
 stats_protein = get_statistics_across_accessions(chembl_version, papyrus_version, papyrus_flavor, 1_000_000,
                                            annotation_round,
@@ -41,7 +39,7 @@ stats_variant = get_statistics_across_variants(chembl_version, papyrus_version, 
 print('Done.')
 ########################################################################################################################
 # Step 3: Compute bioactivity distributions for common subsets for all proteins
-from mutant_analysis_common_subsets import compute_variant_activity_distribution, extract_relevant_targets
+from mutants_in_pcm.mutant_analysis_common_subsets import compute_variant_activity_distribution, extract_relevant_targets
 print('Computing bioactivity distributions for common subsets...')
 for accession in stats_protein['accession'].tolist():
     # Full dataset
@@ -67,8 +65,8 @@ for accession in stats_protein['accession'].tolist():
 print('Done.')
 ########################################################################################################################
 # Step 4: Compute bioactivity distributions for compound clusters for proteins with the biggest common subsets
-from mutant_analysis_compounds import plot_bioactivity_distribution_cluster_subset
-from mutant_analysis_common_subsets import plot_bubble_bioactivity_distribution_stats
+from mutants_in_pcm.mutant_analysis_compounds import plot_bioactivity_distribution_cluster_subset
+from mutants_in_pcm.mutant_analysis_common_subsets import plot_bubble_bioactivity_distribution_stats
 # Extract relevant targets of interest (biggest common subsets)
 print('Extracting targets with big common subsets...')
 accession_large_common_subsets = extract_relevant_targets(common_analysis_dir,

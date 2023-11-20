@@ -15,7 +15,6 @@ import chembl_downloader
 from .preprocessing import obtain_chembl_data
 from .data_path import get_data_path
 
-data_dir = get_data_path()
 
 def filter_assay_data(chembl_df: pd.DataFrame):
     """
@@ -156,7 +155,7 @@ def define_aa_change_exceptions(assays_df_extracted: pd.DataFrame, chembl_versio
 
 
 def validate_aa_change(assays_df_extracted: pd.DataFrame,
-                       known_exceptions: str = os.path.join(data_dir,'known_regex_exceptions.json'),
+                       known_exceptions: str = None,
                        automatic_exceptions: bool = True,
                        clean_df: bool = True,
                        **kwargs):
@@ -173,6 +172,9 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
                     ['exception_flags', 'exception_reasons', 'seq_flags', 'seq_flags_fixed', 'aa_change_val1']
     :return: the input DataFrame with a new column 'mutants' with a list of validated extracted aa changes
     """
+    if known_exceptions is None:
+        data_dir = get_data_path()
+        known_exceptions = os.path.join(data_dir,'known_regex_exceptions.json')
     # Define exceptions based on additional assay information from ChEMBL query
     if automatic_exceptions:
         try:
@@ -321,6 +323,7 @@ def manual_reannotation(chembl_version: str, annotation_round: int,
         'rejection_flag' identifies the reason why the assay was rejected.
     :return: pd.DataFrame with re-annotated mutations in assays
     """
+    data_dir = get_data_path()
     # Original annotation round is one less than the current round
     previous_round = annotation_round - 1
 
@@ -570,7 +573,8 @@ def chembl_annotation(chembl_version: str, annotation_round:str):
     :param annotation_round: round of annotation following further curation
     :return: pd.DataFrame with one entry per target_id (mutant) - chembl_id (compound) with mean pchembl value
     """
-    chembl_annotation_file = os.path.join(data_dir,f'chembl{chembl_version}_annotated_data_round{annotation_round}.csv')
+    data_dir = get_data_path()
+    chembl_annotation_file = os.path.join(data_dir, f'chembl{chembl_version}_annotated_data_round{annotation_round}.csv')
 
     if not os.path.isfile(chembl_annotation_file):
         # Get chembl data
