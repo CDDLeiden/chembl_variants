@@ -24,4 +24,4 @@ def get_data_path() -> str:
     if data_dir is None or not os.path.exists(data_dir):
         raise ValueError('The data directory does not exist. Please check the path in data_path.py')
     else:
-        return data_dir
+        return os.path.abspath(data_dir)
