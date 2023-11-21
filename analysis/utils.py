@@ -47,7 +47,13 @@ def get_annotation_analysis_path(annotation_analysis_dir: str, annotation_round:
     :param annotation_round:
     :return:
     """
-    return update_directories(annotation_round, annotation_analysis_dir)
+    annotation_round_dir = update_directories(annotation_round, annotation_analysis_dir)
+    if not os.path.exists(annotation_round_dir):
+        os.makedirs(annotation_round_dir)
+        print(f'Created directory {annotation_round_dir}.')
+
+
+    return annotation_round_dir
 
 def get_mutant_analysis_path(mutant_analysis_dir: str, analysis_step: str, annotation_round: int):
     """
@@ -60,33 +66,34 @@ def get_mutant_analysis_path(mutant_analysis_dir: str, analysis_step: str, annot
     mutant_analysis_dir = os.path.abspath(mutant_analysis_dir)
     # Check that mutant analysis directory exists
     if not os.path.exists(mutant_analysis_dir):
-        raise ValueError(f'The mutant analysis directory does not exist: {mutant_analysis_dir}.')
+        print(f'The mutant analysis directory does not exist: {mutant_analysis_dir}. Press any key to create it.')
+        input()
+        os.makedirs(mutant_analysis_dir)
 
+    if analysis_step == 'family':
+        analysis_step_path = os.path.join(mutant_analysis_dir, '0_family_stats')
+    elif analysis_step == 'accession':
+        analysis_step_path = os.path.join(mutant_analysis_dir, '1_target_stats')
+    elif analysis_step == 'type':
+        analysis_step_path = os.path.join(mutant_analysis_dir, '2_mutation_type')
+    elif analysis_step == 'common':
+        analysis_step_path = os.path.join(mutant_analysis_dir, '3_common_subset')
+    elif analysis_step == 'compound':
+        analysis_step_path = os.path.join(mutant_analysis_dir, '4_compound_clusters')
+    elif analysis_step == 'bioactivity':
+        analysis_step_path = os.path.join(mutant_analysis_dir, '5_bioactivity_distribution')
     else:
-        if analysis_step == 'family':
-            analysis_step_path = os.path.join(mutant_analysis_dir, '0_family_stats')
-        elif analysis_step == 'accession':
-            analysis_step_path = os.path.join(mutant_analysis_dir, '1_target_stats')
-        elif analysis_step == 'type':
-            analysis_step_path = os.path.join(mutant_analysis_dir, '2_mutation_type')
-        elif analysis_step == 'common':
-            analysis_step_path = os.path.join(mutant_analysis_dir, '3_common_subset')
-        elif analysis_step == 'compound':
-            analysis_step_path = os.path.join(mutant_analysis_dir, '4_compound_clusters')
-        elif analysis_step == 'bioactivity':
-            analysis_step_path = os.path.join(mutant_analysis_dir, '5_bioactivity_distribution')
-        else:
-            raise ValueError('The analysis step is not defined. Please check the analysis_step argument.')
+        raise ValueError('The analysis step is not defined. Please check the analysis_step argument.')
 
-        # Check if the analysis subdirectories exist, else create them
-        if not os.path.exists(analysis_step_path):
-            os.makedirs(analysis_step_path)
-            print(f'Created directory {analysis_step_path}.')
+    # Check if the analysis subdirectories exist, else create them
+    if not os.path.exists(analysis_step_path):
+        os.makedirs(analysis_step_path)
+        print(f'Created directory {analysis_step_path}.')
 
-        # Check if the annotation step subdirectory exists, else create it
-        annotation_round_dir = update_directories(annotation_round, analysis_step_path)
-        if not os.path.exists(annotation_round_dir):
-            os.makedirs(annotation_round_dir)
-            print(f'Created directory {annotation_round_dir}.')
+    # Check if the annotation step subdirectory exists, else create it
+    annotation_round_dir = update_directories(annotation_round, analysis_step_path)
+    if not os.path.exists(annotation_round_dir):
+        os.makedirs(annotation_round_dir)
+        print(f'Created directory {annotation_round_dir}.')
 
     return annotation_round_dir
