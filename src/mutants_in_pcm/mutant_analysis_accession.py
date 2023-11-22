@@ -108,6 +108,22 @@ def double_density_pchembl_year(accession_data, subset, output_dir, accession, s
     # Save plot
     plt.savefig(os.path.join(output_dir, f'scatterplot_year_pchembl_{accession}_{subset_name}.svg'))
 
+def count_proteins_in_dataset(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int,
+                              annotation_round:int):
+    """
+    Count number of unique protein accessions in the dataset.
+    :param chembl_version: version of ChEMBL
+    :param papyrus_version: version of Papyrus
+    :param papyrus_flavor: type of Papyrus data to get
+    :param chunksize: chunk size for processing papyrus data
+    :param annotation_round: Round of annotation
+    :return: number of unique accession codes
+    """
+    # Read mutant annotated ChEMBL + Papyrus data
+    data = merge_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor, chunksize, annotation_round)
+
+    return len(data['accession'].unique())
+
 def get_statistics_across_accessions(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int,
                                      annotation_round:int, output_dir: str, save: bool = False):
     """
