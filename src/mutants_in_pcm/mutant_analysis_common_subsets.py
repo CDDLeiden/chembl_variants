@@ -23,6 +23,7 @@ from rdkit import DataStructs
 from rdkit.Chem.Fingerprints import FingerprintMols
 
 from .preprocessing import merge_chembl_papyrus_mutants
+from .mutant_analysis_accession import count_proteins_in_dataset
 from .data_path import get_data_path
 
 
@@ -674,10 +675,66 @@ def read_common_subset_stats_file(file_dir: str, common: bool, sim: bool, sim_th
     :return: pd.DataFrame with the stats
     """
     filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
-    stat_df = pd.read_csv(os.path.join(file_dir, filename_tag, f'stats_file_{filename_tag}.txt'), sep='\t')
-    stat_df.drop_duplicates(['accession', 'target_id'], inplace=True)
+    if not os.path.exists(os.path.join(file_dir, filename_tag, f'stats_file_{filename_tag}.txt')):
+        raise FileNotFoundError(f'No stats file found for {filename_tag}. '
+                                f'Please run main.py first.')
+    else:
+        stat_df = pd.read_csv(os.path.join(file_dir, filename_tag, f'stats_file_{filename_tag}.txt'), sep='\t')
+        stat_df.drop_duplicates(['accession', 'target_id'], inplace=True)
 
-    return stat_df
+        return stat_df
+
+def check_common_subset_status(chembl_version: str, papyrus_version: str, papyrus_flavor: str,
+                               annotation_round: int, file_dir: str, common: bool,
+                               sim: bool, sim_thres: int, threshold: int, variant_coverage: float):
+    """
+    Check whether the common subset has been calculated for the given parameters for all proteins
+    :param chembl_version: ChEMBL version
+    :param papyrus_version: Papyrus version
+    :param papyrus_flavor: Papyrus flavor
+    :param annotation_round: Annotation round
+    :param file_dir: Directory where the common subset stats file is located
+    :param common: Whether to use common subset for variants
+    :param sim: Whether to include similar compounds in the definition of the common subset
+    :param sim_thres: Similarity threshold (Tanimoto) if similarity is used for common subset
+    :param threshold: Minimum number of variants in which a compound has been tested in order to be included in the
+                    common subset
+    :param variant_coverage: Minimum ratio of the common subset of compounds that have been tested on a variant in order
+                            to include that variant in the output
+    :return: True if the common subset has been calculated, False otherwise
+    """
+    print('Checking common subset analysis status...')
+    # Get the total number of proteins in the dataset
+    n_proteins = count_proteins_in_dataset(chembl_version, papyrus_version, papyrus_flavor, 1_000_000,
+                                           annotation_round)
+
+    # Check how many proteins have been successfully processed and recorded on the stats file
+    common_stat = read_common_subset_stats_file(file_dir, common, sim, sim_thres, threshold, variant_coverage)
+    n_proteins_processed = len(common_stat['accession'].unique().tolist())
+    print(f'{n_proteins_processed} out of {n_proteins} proteins have been successfully processed.')
+
+    # Check how many proteins have been skipped due to lack of data
+    options_filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
+    proteins_skipped = []
+    with open(os.path.join(file_dir, options_filename_tag,
+                      f'skipped_accession_{options_filename_tag}.txt'), 'r+') as file:
+        for line in file:
+            if 'Skipping accession' in line:
+                protein_skipped = line.split(' ')[2].strip()
+                if protein_skipped not in proteins_skipped:
+                    proteins_skipped.append(protein_skipped)
+    n_proteins_skipped = len(proteins_skipped)
+    print(f'{n_proteins_skipped} out of {n_proteins} proteins have been skipped due to lack of data.')
+
+    # Check if all proteins in the set have been covered (processed or skipped)
+    n_proteins_missing = n_proteins - (n_proteins_processed + n_proteins_skipped)
+    if n_proteins_missing == 0:
+        print('Common subset analysis is complete.')
+        return True
+    else:
+        print(f'Common subset analysis is not complete ({n_proteins_missing} proteins left to process).')
+        print('Please, run main.py to compute the common subset analysis for all proteins.')
+        return False
 
 def calculate_accession_common_subset_stats(common_subset_stats_df: pd.DataFrame, general_variant_stats_df:
 pd.DataFrame, aggregate: bool = True):
