@@ -30,11 +30,14 @@ classify_negative_annotations(chembl_version, annotation_round)
 print('Done.')
 
 # Manually annotate false positives from discrepancies (false negatives are annotated automatically)
-from mutants_in_pcm.annotation_check import print_manual_annotation_instructions,check_manual_positive_annotations
-print_manual_annotation_instructions(chembl_version, annotation_round, annotation_dir)
-print("Press any key to continue when the annotation is complete...")
-input()
-print("Checking manual annotations...")
+from mutants_in_pcm.annotation_check import print_manual_annotation_instructions,check_manual_positive_annotations,read_manual_positive_annotations
+if read_manual_positive_annotations(chembl_version, annotation_round):
+    pass
+else:
+    print_manual_annotation_instructions(chembl_version, annotation_round, annotation_dir)
+    print("Press any key to continue when the annotation is complete...")
+    input()
+
 check_manual_positive_annotations(chembl_version, annotation_round)
 
 ###### ROUND 2 (Semi-automatic annotation) #####

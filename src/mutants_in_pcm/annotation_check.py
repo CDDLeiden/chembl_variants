@@ -96,7 +96,7 @@ def export_positive_annotations(chembl_version: str, annotation_round: int, anno
 
     # If file exists, read it
     if os.path.exists(positive_file):
-        positive_assays = pd.read_excel(positive_file)
+        pass
 
     else:
         positive_assays = []
@@ -138,22 +138,37 @@ def print_manual_annotation_instructions(chembl_version: str, annotation_round: 
     print('Finally, export only the incorrect annotations to a new tab-separated .csv file in the data directory:')
     print(os.path.join(data_dir,f'chembl{chembl_version}_wrong_annotated_assays_round{annotation_round}.csv'))
 
-def check_manual_positive_annotations(chembl_version: str, annotation_round: int):
+def read_manual_positive_annotations(chembl_version: str, annotation_round: int):
     """
     Check if there is a file created with manual annotations based on the positive annotations
-
     :param chembl_version: ChEMBL version
     :param annotation_round: annotation round
-    :param annotation_dir: directory with annotation analysis results
+    :return: manual annotations dataframe
     """
     data_dir = get_data_path()
 
-    manual_positive_file = os.path.join(data_dir,f'chembl{chembl_version}_wrong_annotated_assays_round{annotation_round}.csv')
-
-    # If file exists, read it and check that it has a column with manual annotations
+    manual_positive_file = os.path.join(data_dir,
+                                        f'chembl{chembl_version}_wrong_annotated_assays_round{annotation_round}.csv')
     if os.path.exists(manual_positive_file):
         manual_positive_assays = pd.read_csv(manual_positive_file, sep='\t')
+        print('File with manual annotations for false positives found. Continuing...')
+        return manual_positive_assays
+    else:
+        return False
 
+def check_manual_positive_annotations(chembl_version: str, annotation_round: int):
+    """
+    Check if there is a file created with manual annotations based on the positive annotations and if it has the
+    correct format
+
+    :param chembl_version: ChEMBL version
+    :param annotation_round: annotation round
+    """
+    manual_positive_assays = read_assay_annotations(chembl_version, annotation_round)
+
+    # If file exists, read it and check that it has a column with manual annotations
+    if manual_positive_assays:
+        print('Checking manual annotation format...')
         if 'reason' not in manual_positive_assays.columns:
             raise ValueError('Must contain a column "reason" with manual annotations')
         elif 'group_reason' not in manual_positive_assays.columns:
@@ -163,7 +178,8 @@ def check_manual_positive_annotations(chembl_version: str, annotation_round: int
         elif 'correct' in manual_positive_assays['group_reason'].unique():
             raise ValueError('Must contain only incorrect annotations')
         else:
-            print('File with manual annotations for false positives found. Continuing...')
+            print('Correct manual annotation format. Continuing...')
+            return manual_positive_assays
     else:
         raise ValueError('No file with manual annotations for false positives')
 
