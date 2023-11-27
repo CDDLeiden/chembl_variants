@@ -188,35 +188,37 @@ def check_manual_positive_annotations(chembl_version: str, annotation_round: int
     else:
         raise ValueError('No file with manual annotations for false positives')
 
-def filter_negative_annotations(chembl_version: str, annotation_round: int):
+def filter_negative_annotations(assay_data: pd.DataFrame, undefined_mutations: bool = False):
     """
     Return assays that were originally annotated in ChEMBL but not in the round
     of local annotation (i.e. they were rejected by our annotation validation pipeline).
     These assays are potential false negative annotations and can be classified automatically
     given the additional information.
 
-    :param chembl_version: ChEMBL version
-    :param annotation_round: Annotation round
+    :param assay_data: dataframe with assay data annotated
+    :param undefined_mutations: whether to consider undefined annotations as negative annotations
     :return: assays to check for false negative annotations
     """
-    # Read the annotation results
-    assay_data = read_assay_annotations(chembl_version, annotation_round)
-
-    # Extract additional information regarding assay annotation
-    assay_data_ExtraInfo = get_assay_info(assay_data, chembl_version)
-
     # Get the assays that were originally annotated on ChEMBL with a defined mutation
-    assay_data_original = assay_data_ExtraInfo[assay_data_ExtraInfo['mutation'] !=
-                                                                     'UNDEFINED MUTATION'].dropna(subset=['mutation'])
+    assay_data_original = assay_data[assay_data['mutation'] != 'UNDEFINED MUTATION'].dropna(subset=['mutation'])
 
     # Filter the assays that were not annotated in the round of annotation
     def check_original_valid(row):
         original_mutations = row['mutation'].split(',')
-        valid_mutations = list(row['mutants'])
-        if all(item in valid_mutations for item in original_mutations):
-            return True
+        valid_mutations = row['target_id'].split('_')[1:]
+        if not undefined_mutations:
+            if valid_mutations == ['MUTANT']:
+                return True
+            else:
+                if all(item in valid_mutations for item in original_mutations):
+                    return True
+                else:
+                    return False
         else:
-            return False
+            if all(item in valid_mutations for item in original_mutations):
+                return True
+            else:
+                return False
 
     assay_data_original_rejected = assay_data_original[
         ~assay_data_original.apply(check_original_valid, axis=1)]
@@ -284,8 +286,14 @@ def classify_negative_annotations(chembl_version: str, annotation_round: int):
         negative_annotations = pd.read_csv(false_negative_file, sep='\t')
 
     else:
+        # Read the annotation results
+        assay_data = read_assay_annotations(chembl_version, annotation_round)
+
+        # Extract additional information regarding assay annotation
+        assay_data_ExtraInfo = get_assay_info(assay_data, chembl_version)
+
         # Filter negative annotations
-        negative_annotations = filter_negative_annotations(chembl_version, annotation_round)
+        negative_annotations = filter_negative_annotations(assay_data_ExtraInfo)
 
         # Classify the reason for rejection
         negative_annotations['rejection_flag'] = negative_annotations.apply(give_rejection_flag, axis=1)
