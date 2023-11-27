@@ -119,7 +119,8 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
     :param accession: Uniprot accession code of the target of interest
     :param pivoted_data: pivoted bioactivity dataframe with variants as index and compound connectivity as columns
     :param compound_annotation: property to annotate the compounds on. Options are 'butina_clusters' (Butina cluster
-    id, requires 'connectivity_cluster_dict' in kwargs), and 'year' (Year of first testing of the compound-accession
+    id, requires 'connectivity_cluster_dict' and 'butina_cutoff' in kwargs), and 'year' (Year of first testing of the
+    compound-accession
     date, requires 'connectivity_year_dict' in kwargs)
     :param variant_annotation: proeprty to annotate the variants on. Options are 'ligand_distance' (Distance from
     mutated residue to ligand COG in available crystal structures, requires 'dist_dir' in kwargs),
@@ -141,6 +142,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
 
     if compound_annotation == 'butina_clusters':
         connectivity_cluster_dict = kwargs['connectivity_cluster_dict']
+        butina_cutoff = kwargs['butina_cutoff']
         # Map strictly common subset to its butina cluster
         strict_subset_cluster = [connectivity_cluster_dict[connectivity] for connectivity in pivoted_data.columns]
 
@@ -166,7 +168,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                    bbox_to_anchor=(1, 1), bbox_transform=plt.gcf().transFigure, loc='upper right')
 
         # save figure
-        plt.savefig(os.path.join(output_dir, accession, f'clustermap_{accession}_ButinaCluster_groups.svg'))
+        plt.savefig(os.path.join(output_dir, accession, f'clustermap_{accession}_ButinaCluster{butina_cutoff}_groups.svg'))
 
     elif compound_annotation == 'year':
         connectivity_year_dict = kwargs['connectivity_year_dict']
