@@ -60,15 +60,20 @@ def get_assay_info(assay_data:pd.DataFrame, chembl_version: str):
 
     return assay_data_ExtraInfo
 
-def filter_positive_annotations(assay_data: pd.DataFrame, annotation_type: str):
+def filter_positive_annotations(assay_data: pd.DataFrame, annotation_type: str, undefined_mutations: bool = False):
     """
     Return assays that were annotated automatically and not in ChEMBL for manual inspection.
 
     :param assay_data: annotated assays (with additional information)
     :param annotation_type: "new" for completely new annotations or "rescued" for annotations that were
                             originally 'UNDEFINED MUTATION'
+    :param undefined_mutations: whether to consider undefined annotations as positive annotations
     :return: assays to check for false positive annotations
     """
+    # Filter undefined mutations
+    if not undefined_mutations:
+        assay_data = assay_data[~assay_data['target_id'].str.contains('_MUTANT')]
+
     # Filter newly annotated assays (not previously annotated on ChEMBL)
     if annotation_type == 'new':
         return assay_data[~assay_data['target_id']
