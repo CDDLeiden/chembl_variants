@@ -273,6 +273,9 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
         stats_heatmap = stats.pivot(columns='mut_aa',index='wt_aa',values='distance_matrix')
         cbar_label = 'Epstein coefficient of difference'
 
+    # Write dataframe with heatmap values to file
+    stats_heatmap.to_csv(os.path.join(output_dir, f'heatmap_{counts}{subset_flag}.csv'),sep='\t')
+
     # Plot heatmap
     sns.set_style('white')
     sns.set_context('paper', font_scale=1.3)
