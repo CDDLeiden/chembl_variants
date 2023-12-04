@@ -290,6 +290,73 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
     plt.savefig(os.path.join(output_dir,f'heatmap_{counts}{subset_flag}.png'),dpi=300)
     plt.close()
 
+def stats_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direction: bool = True, counts: str =
+'activity',
+                                    color: str = 'mutation_type', subset_col: str = None, subset_value: str = None,
+                                    aa_change_labels: bool = True):
+    """
+    Plot in stacked bars all unique amino acid change occurrences (number of activity datapoints or number of
+    variants) in each mutation type category.
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :param output_dir: directory to save the plot
+    :param direction: whether to take into account the direction of the mutation or just the change itself
+    :param counts: what property to count in the x axis. Options are 'activity' (number of activity datapoints) and
+    'variant' (number of variants).
+    :param color: what property to use to color. Options are 'mutation_type' (all aa changes with the same mutation
+    type have the same color in different shades) and 'distance_matrix' (each aa change has a color depending on the
+    distance matrix coefficient, either Epstein if direction=True ot Grantham is direction=False)
+    :param subset_col: column to make a subset for
+    :param subset_value: value of the column in subset_col to filter on
+    :param aa_change_labels: whether to include aa change labels on top of each stacked bar layer.
+    :return: figure
+    """
+    # Annotate bioactivity data with aa change and mutation type
+    data_aa_change = map_mutation_type(map_aa_change(data, direction))
+
+    # Make a subset
+    if subset_col is not None:
+        data_aa_change = data_aa_change[data_aa_change[subset_col] == subset_value]
+        subset_flag = f'_{subset_col}-{subset_value}'
+    else:
+        subset_flag = ''
+
+    # Keep only one datapoint per variant if plotting the number of variants instead of the number of datapoints
+    if counts == 'variant':
+        data_aa_change = data_aa_change.drop_duplicates(subset='target_id', keep='first')
+
+    # Calculate the number of counts (activity datapoints/variants) for each type of aa change
+    stats = data_aa_change.groupby(['aa_change', 'mutation_type']).count()
+    plot_df = stats.loc[:, "pchembl_value_Mean"].reset_index()
+    # Remove WT and undefined mutation instances (aa change == '-')
+    plot_df = plot_df[plot_df['aa_change'] != '-']
+    # Filter out silent mutations
+    plot_df = plot_df[plot_df['aa_change'].apply(lambda x: x[0] != x[1])]
+
+    # Order mutation types based on their total number of datapoints
+    stats_mutation_type = data_aa_change.groupby(['mutation_type']).count()['pchembl_value_Mean'].\
+        reset_index().sort_values(by='pchembl_value_Mean', axis=0, ascending=False)
+    mutation_types = ['conservative', 'polar', 'size', 'charge', 'polar_size', 'charge_size']
+    mutation_types_order = [x for x in stats_mutation_type['mutation_type'].tolist() if x != 'NA']
+    mutation_types_order.extend([x for x in mutation_types if x not in mutation_types_order])
+    mutation_types_order.reverse()
+
+    # Read distance matrices to order amino acid changes in stacked bars by more to less disruptive
+    if direction:
+        # Use Epstein matrix, as it is directional
+        distance_dict = read_mutation_distance_Epstein()
+    else:
+        # Use Grantham matrix, which is not directional
+        distance_dict = read_mutation_distance_Grantham()
+
+    plot_df['distance'] = plot_df['aa_change'].map(distance_dict)
+
+    # Count number of datapoints with distance >0.4
+    plot_df['distance_0.4'] = plot_df['distance'].apply(lambda x: 1 if x >= 0.4 else 0)
+    plot_df['distance_0.4'] = plot_df['distance_0.4'] * plot_df['pchembl_value_Mean']
+
+
+    return plot_df
+
 def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direction: bool = True, counts: str = 'activity',
                                     color: str = 'mutation_type', subset_col: str = None, subset_value: str = None,
                                     aa_change_labels: bool = True):
