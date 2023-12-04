@@ -90,6 +90,8 @@ def visualize_molecular_subset_highlights(accession: str, accession_data: pd.Dat
 
     # Extract RDkit molecular objects
     mMols = subset_df['Molecule'].tolist()
+    subset_legend = subset_df['connectivity'].tolist() # Just in case the order does not fully match with the
+    # original subset list
 
     if match_type == 'Murcko':
         murckoList = [Chem.Scaffolds.MurckoScaffold.GetScaffoldForMol(mMol) for mMol in mMols]
@@ -116,7 +118,7 @@ def visualize_molecular_subset_highlights(accession: str, accession_data: pd.Dat
 
 
     # Draw molecules in grid with the highlight defined
-    img = Draw.MolsToGridImage(mMols, legends=subset,
+    img = Draw.MolsToGridImage(mMols, legends=subset_legend,
                                highlightAtomLists=highlight_match,
                                subImgSize=(500, 500), useSVG=False, molsPerRow=5, returnPNG=False)
 
