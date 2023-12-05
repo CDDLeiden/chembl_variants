@@ -546,7 +546,7 @@ def annotate_cluster_compounds(connectivity_cluster_dict: dict,
 
 def check_moa(x, accession):
     """
-    Check whether a compound is linked to the accession in its MOAor otherwise if its child is
+    Check whether a compound is linked to the accession in its MOA or otherwise if its child is
     :param x: row
     :param accession: accession of interest
     """
@@ -559,6 +559,20 @@ def check_moa(x, accession):
 
     return parent_moa, child_moa
 
+def check_mutation(x):
+    """
+    Check whether a compound is linked to a mutation in its MOA or otherwise if its child is
+    :param x: row
+    :param accession: accession of interest
+    """
+    parent_mutation = False
+    child_mutation = False
+    if not pd.isna(x['mutation']):
+        parent_mutation = True
+    elif not pd.isna(x['mutation_child']):
+        child_mutation = True
+
+    return parent_mutation, child_mutation
 
 def check_approval(x):
     """
@@ -599,9 +613,21 @@ def explore_cluster_compound_info(cluster_df_unique: pd.DataFrame,
             (x, accession=accession), axis=1, result_type='expand')
 
         # Compute statistics
-        stats = cluster_df_unique.groupby('cluster').agg({f'{accession}_MOA':np.sum, f'{accession}_MOA_child':np.sum})
+        stats = cluster_df_unique.groupby('cluster').agg({f'{accession}_MOA':np.sum,
+                                                          f'{accession}_MOA_child':np.sum})
         # Add column with sum of MOA and MOA child
         stats[f'{accession}_MOA_total'] = stats[f'{accession}_MOA'] + stats[f'{accession}_MOA_child']
+
+    elif analysis_type == 'mutation':
+        # Check if compounds are linked to the analysis accession in their MOA
+        cluster_df_unique[[f'{accession}_mutation', f'{accession}_mutation_child']] = cluster_df_unique.apply(
+            lambda x: check_mutation(x), axis=1, result_type='expand')
+
+        # Compute statistics
+        stats = cluster_df_unique.groupby('cluster').agg({f'{accession}_mutation':np.sum,
+                                                          f'{accession}_mutation_child':np.sum})
+        # Add column with sum of MOA and MOA child
+        stats[f'{accession}_mutation_total'] = stats[f'{accession}_mutation'] + stats[f'{accession}_mutation_child']
 
     elif analysis_type == 'approval':
         # Check if compounds are approved drugs
