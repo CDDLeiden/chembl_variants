@@ -524,6 +524,121 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
                                               plot_mean=True, color_palette=palette_dict, save_dataset=False,
                                               output_dir=cluster_dir, replot=replot)
 
+def annotate_cluster_compounds(connectivity_cluster_dict: dict,
+                                  mapped_compounds: pd.DataFrame):
+    """
+    Annotate compounds in clusters with additional information for further analysis
+    :param connectivity_cluster_dict: Dictionary with connectivity and cluster assignment
+    :param mapped_compounds: Compound information dataframe
+    :return: Compound information dataframe for compounds in clusters
+    """
+    # Extract compounds in dictionary from dataframe
+    cluster_df = mapped_compounds[mapped_compounds['connectivity'].isin(connectivity_cluster_dict.keys())]
+
+    # Add cluster column by mapping dictionary on connectivity
+    cluster_df['cluster'] = cluster_df['connectivity'].map(connectivity_cluster_dict)
+    cluster_df.sort_values('connectivity', inplace=True)
+
+    # Keep one row per connectivity
+    cluster_df_unique = group_unique_df(cluster_df, 'connectivity')
+
+    return cluster_df_unique
+
+def check_moa(x, accession):
+    """
+    Check whether a compound is linked to the accession in its MOAor otherwise if its child is
+    :param x: row
+    :param accession: accession of interest
+    """
+    parent_moa = False
+    child_moa = False
+    if accession in str(x['accession']):
+        parent_moa = True
+    elif accession in str(x['accession_child']):
+        child_moa = True
+
+    return parent_moa, child_moa
+
+
+def check_approval(x):
+    """
+    Check whether a compound is approved or otherwise if its child is approved
+    :param x: row
+    """
+    approved = False
+    approved_child = False
+
+    max_phase_connectivity = max([int(i) for i in str(x['max_phase']).split(';')])
+    try:
+        max_phase_connectivity_child = max([int(i) for i in str(x['max_phase_child']).split(';')])
+    except ValueError:  # Some compounds don't have a child defined and will throw an error
+        max_phase_connectivity_child = 0
+
+    if max_phase_connectivity == 4:
+        approved = True
+    elif max_phase_connectivity_child == 4:
+        approved_child = True
+    return approved, approved_child
+def explore_cluster_compound_info(cluster_df_unique: pd.DataFrame,
+                                  accession: str,
+                                  analysis_type: str,
+                                  sort: str = 'cluster'):
+    """
+    Explore compound information in clusters
+    :param cluster_df_unique: dataframe with compound information for compounds in clusters
+    :param accession: Uniprot accession code of interest
+    :param analysis_type: Type of analysis to perform. Options include 'MOA' and 'approval'
+    :return: statistics dataframe with cluster information
+    """
+    if analysis_type == 'MOA':
+        # Check if compounds are linked to the analysis accession in their MOA
+        cluster_df_unique[[f'{accession}_MOA', f'{accession}_MOA_child']] = cluster_df_unique.apply(
+            lambda
+                x:
+            check_moa
+            (x, accession=accession), axis=1, result_type='expand')
+
+        # Compute statistics
+        stats = cluster_df_unique.groupby('cluster').agg({f'{accession}_MOA':np.sum, f'{accession}_MOA_child':np.sum})
+        # Add column with sum of MOA and MOA child
+        stats[f'{accession}_MOA_total'] = stats[f'{accession}_MOA'] + stats[f'{accession}_MOA_child']
+
+    elif analysis_type == 'approval':
+        # Check if compounds are approved drugs
+        cluster_df_unique[['approved', 'approved_child']] = cluster_df_unique.apply(lambda x: check_approval(x), axis=1,
+                                                                                    result_type='expand')
+        # Compute statistics
+        stats = cluster_df_unique.groupby('cluster').agg({'approved':np.sum, 'approved_child':np.sum})
+        # Add column with sum of approved and approved child
+        stats['approved_total'] = stats['approved'] + stats['approved_child']
+
+    if sort == 'cluster':
+        satisfying_condition =['parent', len(stats[stats[stats.columns[0]] > 0]), (len(stats[stats[stats.columns[0]]
+                                                                                             > 0]) / len(stats))*100]
+        pass
+    elif sort == 'parent':
+        satisfying_condition = ['parent', len(stats[stats[stats.columns[0]] > 0]),
+                                len(stats[stats[stats.columns[0]] > 0]) / len(stats)]
+        # Sort in descending order of values in the first column
+        stats.sort_values(stats.columns[0], ascending=False, inplace=True)
+
+    elif sort == 'child':
+        satisfying_condition = ['child', len(stats[stats[stats.columns[1]] > 0]),
+                                len(stats[stats[stats.columns[1]] > 0]) / len(stats)]
+        # Sort in descending order of values in the second column
+        stats.sort_values(stats.columns[1], ascending=False, inplace=True)
+    elif sort == 'both':
+        satisfying_condition = ['parent or child', len(stats[stats[stats.columns[2]] > 0]),
+                                len(stats[stats[stats.columns[2]] > 0]) / len(stats)]
+        # Sort in descending order of values in the third column and then in descending order of values in the first
+        # column
+        stats.sort_values([stats.columns[2], stats.columns[0]], ascending=False, inplace=True)
+
+    # Print how many clusters have at least one compound that satisfies the condition
+    print(f'Number of clusters with at least one ({satisfying_condition[0]}) compound satisfying the condition:'
+          f' {satisfying_condition[1]} ({satisfying_condition[2]:.2f}%)')
+
+    return stats
 
 if __name__ == '__main__':
     annotation_round = 1
