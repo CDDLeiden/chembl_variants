@@ -21,7 +21,7 @@ from .mutant_analysis_type import extract_residue_number_list
 
 
 def pivot_bioactivity_data(data: pd.DataFrame, strictly_common: bool, threshold_update: int,
-                           variant_coverage_update: float):
+                           variant_coverage_update: float, save: bool = False, output_dir: str = None):
     """
     Make bioactivity dataset suitable for heatmap/clustermap plotting. It is possible to redefine the pre-computed
     common subset with more strict thresholds and coverage thresholds.
@@ -33,25 +33,44 @@ def pivot_bioactivity_data(data: pd.DataFrame, strictly_common: bool, threshold_
     to be included in the common subset)
     :param variant_coverage_update: Stricter variant coverage threshold (Minimum ratio of the common subset of compounds
     that have been tested on a variant in order to include that variant in the output)
+    :param save: whether to save the pivoted data
+    :param output_dir: path to directory to save pivoted data
     :return: pivoted bioactivity dataframe with variants as index and compound connectivity as columns
     """
-    # Pivot data to plot heatmap
-    heatmap_df = data.pivot(index='target_id', columns='connectivity', values='pchembl_value_Mean')
-
-    # Make threshold more strict
-    if threshold_update is not None:
-        # Drop compounds not tested in at least threshold number of variants
-        heatmap_df = heatmap_df.dropna(axis='columns', thresh=threshold_update)
-
-    # Make variant coverage more strict
-    if variant_coverage_update is not None:
-        # Drop variants not tested for more than variant_coverage*100 % of common subset of compounds
-        compound_threshold = variant_coverage_update * heatmap_df.shape[1]
-        heatmap_df = heatmap_df.dropna(axis='index', thresh=compound_threshold)
-
-    # Keep only strictly common subset (all compounds tested on all targets)
     if strictly_common:
-        heatmap_df = heatmap_df[heatmap_df.columns[~heatmap_df.isnull().any()]]
+        file_tag = 'clustermap'
+    else:
+        file_tag = 'heatmap'
+
+    if output_dir is None:
+        heatmap_df_file = ''
+    else:
+        heatmap_df_file = os.path.join(output_dir, f'{file_tag}_{threshold_update}_{variant_coverage_update}.csv')
+
+    if not os.path.isfile(heatmap_df_file):
+        # Pivot data to plot heatmap
+        heatmap_df = data.pivot(index='target_id', columns='connectivity', values='pchembl_value_Mean')
+
+        # Make threshold more strict
+        if threshold_update is not None:
+            # Drop compounds not tested in at least threshold number of variants
+            heatmap_df = heatmap_df.dropna(axis='columns', thresh=threshold_update)
+
+        # Make variant coverage more strict
+        if variant_coverage_update is not None:
+            # Drop variants not tested for more than variant_coverage*100 % of common subset of compounds
+            compound_threshold = variant_coverage_update * heatmap_df.shape[1]
+            heatmap_df = heatmap_df.dropna(axis='index', thresh=compound_threshold)
+
+        # Keep only strictly common subset (all compounds tested on all targets)
+        if strictly_common:
+            heatmap_df = heatmap_df[heatmap_df.columns[~heatmap_df.isnull().any()]]
+
+        if save:
+            heatmap_df.reset_index(inplace=True)
+            heatmap_df.to_csv(heatmap_df_file, sep='\t', index=False)
+    else:
+        heatmap_df = pd.read_csv(heatmap_df_file, sep='\t', index_col='target_id')
 
     return heatmap_df
 
