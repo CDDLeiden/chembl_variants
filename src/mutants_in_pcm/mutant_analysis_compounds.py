@@ -9,6 +9,7 @@ import os
 import re
 import json
 import matplotlib.pyplot as plt
+import chembl_downloader
 
 from mycolorpy import colorlist as mcp
 import numpy as np
@@ -36,10 +37,225 @@ rdDepictor.SetPreferCoordGen(True)
 from IPython.display import SVG,Image
 from ipywidgets import interact
 
+from .data_path import get_data_path
 from .preprocessing import merge_chembl_papyrus_mutants
 from .mutant_analysis_accession import filter_accession_data
 from .mutant_analysis_common_subsets import compute_variant_activity_distribution, get_variant_common_subset, define_consistent_palette
 
+
+def downlaod_chembl_compounds(chembl_version: str, data_folder: str = None):
+    """Download ChEMBL compounds.
+
+    :param chembl_version: version of chembl to work with
+    :param data_folder: path to the folder in which the ChEMBL
+    SQLite database is located or will be downloaded (default:
+    pystow's default directory)
+    """
+    if data_folder is not None:
+        os.environ['PYSTOW_HOME'] = data_folder
+
+    data_dir = get_data_path()
+    chembl_file = os.path.join(data_dir, f'chembl{chembl_version}_compound_info.csv')
+
+    if not os.path.isfile(chembl_file):
+        # Query ChEMBL for compound descriptions
+        query = """
+                    SELECT molecule_dictionary.molregno,molecule_dictionary.chembl_id,molecule_dictionary.pref_name,
+                    molecule_dictionary.max_phase,
+                    molecule_dictionary.therapeutic_flag,molecule_dictionary.natural_product,
+                    molecule_dictionary.molecule_type,molecule_dictionary.first_approval,molecule_dictionary.oral,
+                    molecule_dictionary.parenteral,molecule_dictionary.topical,molecule_hierarchy
+                    .parent_molregno,compound_structures.canonical_smiles,
+                    compound_structures.standard_inchi,compound_structures.standard_inchi_key,drug_mechanism
+                    .mechanism_of_action,drug_mechanism.action_type,drug_mechanism
+                    .mechanism_comment,drug_mechanism
+                    .selectivity_comment,component_sequences.accession,variant_sequences.mutation,drug_indication
+                    .max_phase_for_ind,drug_indication.mesh_heading
+                    FROM molecule_dictionary
+                        LEFT JOIN molecule_hierarchy
+                            ON molecule_dictionary.molregno = molecule_hierarchy.molregno
+                        LEFT JOIN compound_structures USING (molregno)
+                        LEFT JOIN drug_mechanism
+                            ON molecule_dictionary.molregno = drug_mechanism.molregno
+                        LEFT JOIN drug_indication
+                            ON molecule_dictionary.molregno = drug_indication.molregno
+                        LEFT JOIN target_dictionary
+                            ON drug_mechanism.tid = target_dictionary.tid
+                        LEFT JOIN target_components
+                            ON target_dictionary.tid = target_components.tid
+                        LEFT JOIN component_sequences
+                            ON target_components.component_id = component_sequences.component_id
+                        LEFT JOIN variant_sequences
+                            ON drug_mechanism.variant_id = variant_sequences.variant_id
+
+                    """
+
+        chembl_compounds = chembl_downloader.query(query, version=chembl_version,
+                                                   prefix=['mutants-in-pcm', 'chembl'])
+
+        # Check whether the compound is the parent molecule
+        def is_parent(x):
+            if x['parent_molregno'] == x['molregno']:
+                return True
+            else:
+                return False
+
+        chembl_compounds['is_parent'] = chembl_compounds.apply(is_parent, axis=1)
+        # Make indications column with mesh and max phase for the indication to facilitate merging later
+        chembl_compounds['indications'] = chembl_compounds.apply(lambda x: f'{x.mesh_heading} ({x.max_phase_for_ind})',
+                                                                 axis=1)
+
+        # Save results
+        chembl_compounds.to_csv(chembl_file, sep='\t', index=None)
+
+    else:
+        print('ChEMBL compound file already exists. Reading it.')
+        chembl_compounds = pd.read_csv(chembl_file, sep='\t')
+
+    return chembl_compounds
+
+
+def group_unique_df(df, groupby_cols):
+    """Group a dataframe by a list of columns and return a dataframe with the unique values of each column.
+    """
+    grouped_df = df.groupby(groupby_cols, dropna=False).agg(['unique'])  # Important: keep NAs
+    # Drop the multiindex
+    grouped_df.columns = grouped_df.columns.droplevel(1)
+    # Convert the unique values to strings
+    grouped_df = grouped_df.applymap(lambda x: x[0] if len(x) == 1 else ';'.join(str(i) for i in x))
+    # Reset the index
+    grouped_df = grouped_df.reset_index()
+
+    return grouped_df
+
+
+def has_parent_moa(x):
+    """Check whether a compound is a parent molecule with a mechanism of action."""
+    if (x['is_parent'] == True) and (str(x['accession']) not in ['NaN', 'nan', 'None']):
+        return True
+    else:
+        return False
+
+
+def fix_parent_moa(chembl_version: str, data_folder: str = None):
+    """Fix the mechanism of action of parent molecules.
+
+    :param chembl_version: version of chembl to work with
+    :param data_folder: path to the folder in which the ChEMBL
+    """
+    if data_folder is not None:
+        os.environ['PYSTOW_HOME'] = data_folder
+
+    data_dir = get_data_path()
+    fixed_chembl_file = os.path.join(data_dir, f'chembl{chembl_version}_compound_info_fixed_MOA.csv')
+
+    df = downlaod_chembl_compounds(chembl_version, data_folder)
+
+    if not os.path.isfile(fixed_chembl_file):
+        # Check if the parent compound has a MOA (accession defined)
+        df['has_parent_moa'] = df.apply(has_parent_moa, axis=1)
+
+        # Create dataframe to check which compounds need to be fixed (add a MOA to the parent compound)
+        check_parent_moa = df.groupby(['parent_molregno'], dropna=False).agg({'accession': 'nunique',
+                                                                              'chembl_id': 'nunique',
+                                                                              'has_parent_moa': 'unique'})
+
+        # Keep only the parent compounds that need to be fixed and those that can help fix the parent compound
+        # (i.e. the parent compound does not have a MOA and it has at least one child compound with a MOA)
+        to_fix = check_parent_moa[(check_parent_moa['chembl_id'] > 1) & (check_parent_moa['accession'] > 0) &
+                                  (check_parent_moa['has_parent_moa'].apply(lambda x: True not in x))].index.to_list()
+
+        # Check which parent compounds need to be fixed
+        parents_to_fix = df[(df['parent_molregno'].isin(to_fix)) & (df['is_parent'] == True)]
+        # Keep only one row per parent compound (merging all unique indication information)
+        parents_to_fix_unique = group_unique_df(parents_to_fix, ['chembl_id'])
+
+        # Check which child compounds can help fix the parent compound
+        children_to_fix = df[(df['parent_molregno'].isin(to_fix)) & (df['is_parent'] == False)]
+        # Keep only one row per child compound - accession pair (merging all unique indication information)
+        children_to_fix_unique = group_unique_df(children_to_fix, ['chembl_id', 'accession'])
+        # Rename all columns to avoid confusion when merging
+        children_to_fix_unique.columns = (children_to_fix_unique.
+                                          columns.map(lambda x: f'{x}_child' if x != 'parent_molregno' else x))
+        # Keep columns of interest
+        children_to_fix_unique = children_to_fix_unique[['parent_molregno', 'chembl_id_child', 'pref_name_child',
+                                                         'max_phase_child',
+                                                         'accession_child', 'mutation_child',
+                                                         'mechanism_of_action_child',
+                                                         'action_type_child', 'mechanism_comment_child',
+                                                         'selectivity_comment_child',
+                                                         'indications_child']]
+
+        # Merge parent and child compounds to annotate parent with the child information
+        parents_fixed = pd.merge(parents_to_fix_unique, children_to_fix_unique, on='parent_molregno', how='left')
+        # Keep one row per parent compound with unique information
+        parents_fixed_unique = group_unique_df(parents_fixed, ['chembl_id'])
+
+        # Merge the fixed parent compounds with the original dataframe
+        # First keep also one row per original compound with unique information
+        df_unique = group_unique_df(df, ['chembl_id'])
+        print(f'Number of compounds before fixing: {len(df_unique)}')
+        # Remove compounds that need to be fixed
+        df_unique = df_unique[~df_unique['chembl_id'].isin(parents_to_fix_unique['chembl_id'].tolist())]
+        print(f'Number of unique compounds before fixing: {len(df_unique)}')
+        # Merge the fixed parent compounds with the original dataframe
+        df_fixed = pd.concat([df_unique, parents_fixed_unique], ignore_index=True)
+        print(f'Number of unique compounds after fixing: {len(df_fixed)}')
+
+        # Save results
+        df_fixed.to_csv(fixed_chembl_file, sep='\t', index=None)
+
+    else:
+        print('Fixed MOA file already exists. Reading it.')
+        df_fixed = pd.read_csv(fixed_chembl_file, sep='\t')
+
+    return df_fixed
+
+
+def map_chembl_compounds(chembl_version: str, papyrus_version: str, papyrus_flavor: str,
+                         chunksize: int, annotation_round: int, data_folder: str = None):
+    """Obtain compound descriptions from ChEMBL whenever possible.
+
+    :param chembl_version: version of chembl to work with
+    :param papyrus_version: version of papyrus to work with
+    :param papyrus_flavor: flavor of papyrus to work with
+    :param chunksize: size of chunks of data to be used (default: None)
+    :param annotation_round: round of annotation to work with
+    :param data_folder: path to the folder in which the ChEMBL
+    SQLite database is located or will be downloaded (default:
+    pystow's default directory)
+    """
+    if data_folder is not None:
+        os.environ['PYSTOW_HOME'] = data_folder
+
+    data_dir = get_data_path()
+    project_compounds_file = os.path.join(data_dir, f'chembl{chembl_version}_papyrus{papyrus_version}' \
+                                                    f'{papyrus_flavor}_round{annotation_round}_compound_mapping.csv')
+
+    if not os.path.isfile(project_compounds_file):
+        # Read unique compounds from ChEMBL/Papyrus annotated mutant data
+        annotated_data = merge_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor,
+                                                      chunksize, annotation_round)
+
+        # Keep compounds with ChEMBL IDs
+        annotated_data = annotated_data[annotated_data['CID'].str.contains('CHEMBL')]
+        unique_compounds = annotated_data[['connectivity', 'CID']].drop_duplicates().sort_values('connectivity')
+
+        # Download ChEMBL compound descriptions and path parent MOA with child compounds if needed
+        chembl_compounds_fixed = fix_parent_moa(chembl_version, data_folder)
+
+        # Merge ChEMBL compound descriptions with unique compounds
+        mapped_compounds = pd.merge(unique_compounds, chembl_compounds_fixed, left_on='CID',
+                                    right_on='chembl_id', how='left').fillna('NA')
+
+        # Save results
+        mapped_compounds.to_csv(project_compounds_file, sep='\t', index=None)
+
+    else:
+        print('ChEMBL/Papyrus compound mapping file already exists. Reading it.')
+        mapped_compounds = pd.read_csv(project_compounds_file, sep='\t')
+
+    return mapped_compounds
 
 def GetRingSystems(mol, includeSpiro: bool = False):
     """
