@@ -247,6 +247,8 @@ def get_clustering_stats(accession: str, output_dir: str, subset_alias:str, cuto
     for c,s in zip(clusters,cluster_sizes):
         print(f'Cluster {c}: {s} compounds')
 
+    return connectivity_cluster_dict
+
 
 def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_round:str, output_dir: str,
                                                  replot: bool = False):
