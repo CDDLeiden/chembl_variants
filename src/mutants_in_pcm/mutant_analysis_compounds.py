@@ -596,27 +596,31 @@ def check_approval(x):
 def explore_cluster_compound_info(cluster_df_unique: pd.DataFrame,
                                   accession: str,
                                   analysis_type: str,
+                                  output_type: str = 'stats',
                                   sort: str = 'cluster'):
     """
     Explore compound information in clusters
     :param cluster_df_unique: dataframe with compound information for compounds in clusters
     :param accession: Uniprot accession code of interest
     :param analysis_type: Type of analysis to perform. Options include 'MOA' and 'approval'
+    :param output_type: Type of output to return. Options include 'stats' (return statistics dataframe) and 'df'
+    (return dataframe with compound information)
     :return: statistics dataframe with cluster information
     """
     if analysis_type == 'MOA':
         # Check if compounds are linked to the analysis accession in their MOA
         cluster_df_unique[[f'{accession}_MOA', f'{accession}_MOA_child']] = cluster_df_unique.apply(
-            lambda
-                x:
-            check_moa
-            (x, accession=accession), axis=1, result_type='expand')
+            lambda x: check_moa(x, accession=accession), axis=1, result_type='expand')
 
         # Compute statistics
         stats = cluster_df_unique.groupby('cluster').agg({f'{accession}_MOA':np.sum,
                                                           f'{accession}_MOA_child':np.sum})
         # Add column with sum of MOA and MOA child
         stats[f'{accession}_MOA_total'] = stats[f'{accession}_MOA'] + stats[f'{accession}_MOA_child']
+
+        # Extract df with compounds that have the accession in their MOA
+        df = cluster_df_unique[(cluster_df_unique[f'{accession}_MOA'] == True) | (cluster_df_unique[f'{accession}_MOA_child'] == True)]
+        df = df[['connectivity','pref_name','accession','accession_child', 'mutation','max_phase','cluster']]
 
     elif analysis_type == 'mutation':
         # Check if compounds are linked to the analysis accession in their MOA
@@ -629,6 +633,10 @@ def explore_cluster_compound_info(cluster_df_unique: pd.DataFrame,
         # Add column with sum of MOA and MOA child
         stats[f'{accession}_mutation_total'] = stats[f'{accession}_mutation'] + stats[f'{accession}_mutation_child']
 
+        # Extract df with compounds that have a mutation in their MOA
+        df = cluster_df_unique[(cluster_df_unique[f'{accession}_mutation'] == True) | (cluster_df_unique[f'{accession}_mutation_child'] == True)]
+        df = df[['connectivity', 'pref_name', 'accession', 'mutation', 'mutation_child', 'max_phase', 'cluster']]
+
     elif analysis_type == 'approval':
         # Check if compounds are approved drugs
         cluster_df_unique[['approved', 'approved_child']] = cluster_df_unique.apply(lambda x: check_approval(x), axis=1,
@@ -638,33 +646,40 @@ def explore_cluster_compound_info(cluster_df_unique: pd.DataFrame,
         # Add column with sum of approved and approved child
         stats['approved_total'] = stats['approved'] + stats['approved_child']
 
-    if sort == 'cluster':
-        satisfying_condition =['parent', len(stats[stats[stats.columns[0]] > 0]), (len(stats[stats[stats.columns[0]]
-                                                                                             > 0]) / len(stats))*100]
-        pass
-    elif sort == 'parent':
-        satisfying_condition = ['parent', len(stats[stats[stats.columns[0]] > 0]),
-                                len(stats[stats[stats.columns[0]] > 0]) / len(stats)]
-        # Sort in descending order of values in the first column
-        stats.sort_values(stats.columns[0], ascending=False, inplace=True)
+        # Extract df with compounds that are approved drugs
+        df = cluster_df_unique[(cluster_df_unique['approved'] == True) | (cluster_df_unique['approved_child'] == True)]
+        df = df[['connectivity', 'pref_name', 'accession', 'mutation', 'max_phase', 'max_phase_child', 'cluster']]
 
-    elif sort == 'child':
-        satisfying_condition = ['child', len(stats[stats[stats.columns[1]] > 0]),
-                                len(stats[stats[stats.columns[1]] > 0]) / len(stats)]
-        # Sort in descending order of values in the second column
-        stats.sort_values(stats.columns[1], ascending=False, inplace=True)
-    elif sort == 'both':
-        satisfying_condition = ['parent or child', len(stats[stats[stats.columns[2]] > 0]),
-                                len(stats[stats[stats.columns[2]] > 0]) / len(stats)]
-        # Sort in descending order of values in the third column and then in descending order of values in the first
-        # column
-        stats.sort_values([stats.columns[2], stats.columns[0]], ascending=False, inplace=True)
+    if output_type == 'stats':
+        if sort == 'cluster':
+            satisfying_condition =['parent', len(stats[stats[stats.columns[0]] > 0]), (len(stats[stats[stats.columns[0]]
+                                                                                                 > 0]) / len(stats))*100]
+            pass
+        elif sort == 'parent':
+            satisfying_condition = ['parent', len(stats[stats[stats.columns[0]] > 0]),
+                                    len(stats[stats[stats.columns[0]] > 0]) / len(stats)]
+            # Sort in descending order of values in the first column
+            stats.sort_values(stats.columns[0], ascending=False, inplace=True)
 
-    # Print how many clusters have at least one compound that satisfies the condition
-    print(f'Number of clusters with at least one ({satisfying_condition[0]}) compound satisfying the condition:'
-          f' {satisfying_condition[1]} ({satisfying_condition[2]:.2f}%)')
+        elif sort == 'child':
+            satisfying_condition = ['child', len(stats[stats[stats.columns[1]] > 0]),
+                                    len(stats[stats[stats.columns[1]] > 0]) / len(stats)]
+            # Sort in descending order of values in the second column
+            stats.sort_values(stats.columns[1], ascending=False, inplace=True)
+        elif sort == 'both':
+            satisfying_condition = ['parent or child', len(stats[stats[stats.columns[2]] > 0]),
+                                    len(stats[stats[stats.columns[2]] > 0]) / len(stats)]
+            # Sort in descending order of values in the third column and then in descending order of values in the first
+            # column
+            stats.sort_values([stats.columns[2], stats.columns[0]], ascending=False, inplace=True)
 
-    return stats
+        # Print how many clusters have at least one compound that satisfies the condition
+        print(f'Number of clusters with at least one ({satisfying_condition[0]}) compound satisfying the condition:'
+              f' {satisfying_condition[1]} ({satisfying_condition[2]:.2f}%)')
+
+        return stats
+    elif output_type == 'df':
+        return df.sort_values(by='cluster',ascending=True)
 
 if __name__ == '__main__':
     annotation_round = 1
