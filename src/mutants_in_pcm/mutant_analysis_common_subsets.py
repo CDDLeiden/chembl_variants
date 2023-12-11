@@ -861,8 +861,15 @@ def read_bioactivity_distribution_stats(stats_dir: str, subset_type: str, access
     """
     # Read stats for all possible subtypes
     df_list = []
-    if subset_type == 'butina_clusters':
-        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/*/*/*.txt')]
+    if subset_type == 'butina_clusters_dual':
+        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/full_dual_tested_set/*/*/*.txt')]
+        for dir in dirs:
+            df = pd.read_csv(dir, sep='\t')
+            subset_tag = dir.split(sep='\\')[-3]
+            df['subset_tag'] = subset_tag
+            df_list.append(df)
+    elif subset_type == 'butina_clusters_full':
+        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/full_set/*/*/*.txt')]
         for dir in dirs:
             df = pd.read_csv(dir, sep='\t')
             subset_tag = dir.split(sep='\\')[-3]
@@ -942,7 +949,7 @@ def prepare_for_plotting_bioactivity_distribution_stats(df: pd.DataFrame, subset
     )
 
     # Order subset types consistently for plotting
-    if subset_type == 'butina_clusters':
+    if 'butina_clusters' in subset_type:
         # Order clusters 1 > 10 based on the number of cluster
         def atoi(text):
            return int(text) if text.isdigit() else text
@@ -973,8 +980,8 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
     """Plot the stats for the bioactivity distribution of the target across the different subsets
 
     :param stats_dir: Directory with the stats for the bioactivity distribution of the target across the different subsets
-    :param subset_type: Type of subset used to generate the different stats files. Options: 'butina_clusters',
-                        'common_subsets'
+    :param subset_type: Type of subset used to generate the different stats files. Options: 'butina_clusters_dual',
+                        'butina_clusters_full', 'common_subsets'
     :param accession: Accession of the target
     :param error_key: Key of the error to plot. Options: 'mean_error', 'mean_error_strict'
     :param output_dir: Directory to save the plot
@@ -987,7 +994,7 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
     df_accession, subset_order = prepare_for_plotting_bioactivity_distribution_stats(df_accession, subset_type, accession)
 
     # Figure options
-    if subset_type == 'butina_clusters':
+    if 'butina_clusters' in subset_type:
         if not manuscript_quality:
             fig, ax = plt.subplots(figsize=(17, 7))
         else:
@@ -1032,7 +1039,7 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
         legend_x_pos = df_accession.subset_tag.unique().size+0.2
     else:
         legend_x_pos = df_accession.subset_tag.unique().size+0.3
-    if subset_type == 'butina_clusters':
+    if 'butina_clusters' in subset_type:
         if not manuscript_quality:
             legend_y_pos = df_accession.target_id.unique().size-0.5
             legend_y_pos_step = 0.1*legend_y_pos
