@@ -120,7 +120,7 @@ for accession in accession_large_common_subsets:
     # Compute clusters and plot bioactivity distributions for each cluster
     plot_bioactivity_distribution_cluster_subset(accession, annotation_round, compound_analysis_dir)
     # Plot summary bubbleplot for top 10 clusters
-    plot_bubble_bioactivity_distribution_stats(compound_analysis_dir, 'butina_clusters', accession, 'mean_error',
+    plot_bubble_bioactivity_distribution_stats(compound_analysis_dir, 'butina_clusters_dual', accession, 'mean_error',
                                                bioactivity_analysis_dir, True)
 print('Done.')
 
