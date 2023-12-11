@@ -67,8 +67,8 @@ def pivot_bioactivity_data(data: pd.DataFrame, strictly_common: bool, threshold_
             heatmap_df = heatmap_df[heatmap_df.columns[~heatmap_df.isnull().any()]]
 
         if save:
-            heatmap_df.reset_index(inplace=True)
-            heatmap_df.to_csv(heatmap_df_file, sep='\t', index=False)
+            heatmap_df_to_save = heatmap_df.reset_index()
+            heatmap_df_to_save.to_csv(heatmap_df_file, sep='\t', index=False)
     else:
         heatmap_df = pd.read_csv(heatmap_df_file, sep='\t', index_col='target_id')
 
