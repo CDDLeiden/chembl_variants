@@ -448,8 +448,7 @@ def get_clustering_stats(accession: str, output_dir: str, subset_alias:str, cuto
     :param output_dir: path to output directory
     :param cutoff: distance cutoff to the cluster central molecule for molecule inclusion in cluster
     """
-    with open(os.path.join(output_dir, accession, f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.json')) as \
-            in_file:
+    with open(os.path.join(output_dir, accession, subset_alias, f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.json')) as in_file:
         connectivity_cluster_dict = json.load(in_file)
 
     # Get cluster sizes
@@ -467,7 +466,7 @@ def get_clustering_stats(accession: str, output_dir: str, subset_alias:str, cuto
 
 
 def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_round:str, output_dir: str,
-                                                 replot: bool = False):
+                                                 min_common: bool = True, replot: bool = False):
     """
     Plot bioactivity distribution of compounds in clusters of the common subset. In this case,
     the common subset is very lax and includes all compounds that have been tested in at least
@@ -476,6 +475,7 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
     :param accession: Uniprot accession code
     :param annotation_round: round of annotation following further curation
     :param output_dir: path to write the results to
+    :param min_common: whether to use the minimum common subset (tested in at least two variants) or the true full set
     :param replot: whether to replot existing bioactivity distribution plotting results
     """
     # Load data
@@ -486,16 +486,35 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
     if not os.path.exists(os.path.join(output_dir, accession)):
         os.mkdir(os.path.join(output_dir, accession))
 
-    # Get common subset (compounds tested in at least two variants)
-    common_data, coverage_dict = get_variant_common_subset(accession_data, accession, True, 2,
-                                                           None, False, os.path.join(output_dir, accession))
+    if min_common:
+        # Get common subset (compounds tested in at least two variants)
+        min_threshold = 2
+
+        dataset_alias = 'full_dual_tested_set'
+
+        if not os.path.exists(os.path.join(output_dir, accession, dataset_alias)):
+            os.mkdir(os.path.join(output_dir, accession, dataset_alias))
+
+        common_data, coverage_dict = get_variant_common_subset(accession_data, accession, True, min_threshold,
+                                                               None, False, os.path.join(output_dir, accession, dataset_alias))
+    else:
+        dataset_alias = 'full_set'
+
+        if not os.path.exists(os.path.join(output_dir, accession, dataset_alias)):
+            os.mkdir(os.path.join(output_dir, accession, dataset_alias))
+
+        # Use full set
+        common_data = accession_data
+
     # Extract list of compounds in the common subset
     accession_data_common = accession_data[accession_data['connectivity'].
         isin(common_data['connectivity'].unique().tolist())]
 
     # Check if clustering was already done, if so read in results
-    if os.path.exists(os.path.join(output_dir, accession, f'{accession}_full_set_ButinaClusters_0.5.json')):
-        with open(os.path.join(output_dir, accession, f'{accession}_full_set_ButinaClusters_0.5.json'), 'r') as in_file:
+    if os.path.exists(os.path.join(output_dir, accession, dataset_alias,
+                                   f'{accession}_{dataset_alias}_ButinaClusters_0.5.json')):
+        with open(os.path.join(output_dir, accession, dataset_alias,
+                               f'{accession}_{dataset_alias}_ButinaClusters_0.5.json'), 'r') as in_file:
             connectivity_cluster_dict = json.load(in_file)
             print(f'Loaded {len(connectivity_cluster_dict)} clusters for {accession}')
     else:
@@ -503,7 +522,7 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
         clusters, compounds, connectivity_cluster_dict = \
             butina_cluster_compounds(accession, accession_data_common,
                                      accession_data_common.connectivity.unique().tolist(),
-                                     'full_set', os.path.join(output_dir, accession), 0.5)
+                                     dataset_alias, os.path.join(output_dir, accession, dataset_alias), 0.5)
 
     # Define consistent color palette that includes all variants
     palette_dict = define_consistent_palette(accession_data_common, accession)
@@ -515,7 +534,7 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
         # Extract data for compounds in cluster
         data_cluster = accession_data_common[accession_data_common['connectivity'].isin(cluster_connectivity)]
         # Create directory for cluster
-        cluster_dir = os.path.join(output_dir, accession, f'cluster_{i}')
+        cluster_dir = os.path.join(output_dir, accession, dataset_alias, f'cluster_{i}')
         if not os.path.exists(cluster_dir):
             os.mkdir(cluster_dir)
         # Plot distribution
