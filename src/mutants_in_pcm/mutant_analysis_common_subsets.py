@@ -832,9 +832,48 @@ def calculate_accession_common_dataset_stats(accession: str, common: bool, sim: 
     subset_stats['sparsity'] = 1 - (dataset_size / full_matrix_size)
     subset_stats['balance_score'] = statistics.mean(list(variant_coverage.values()))
 
-
     return subset_stats
 
+def calculate_accession_common_subset_stats_all(common: bool, sim: bool, sim_thres: int, threshold: int,
+                                                variant_coverage: float, output_dir: str):
+    """
+    Calculate statistics of the common subset for modelling for all accessions
+    :param common: Whether to use common subset for variants
+    :param sim: Whether to include similar compounds in the definition of the common subset
+    :param sim_thres: Similarity threshold (Tanimoto) if similarity is used for common subset
+    :param threshold: Minimum number of variants in which a compound has been tested in order to be included in the
+                    common subset
+    :param variant_coverage: Minimum ratio of the common subset of compounds that have been tested on a variant in order
+                            to include that variant in the output
+    :param output_dir: Location for the modelling dataset files
+    """
+    filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
+    output_fle = os.path.join(output_dir, filename_tag, f'stats_modelling_{filename_tag}.txt')
+
+    if not os.path.exists(output_fle):
+        # Read stats file and extract accession codes
+        accession_list = read_common_subset_stats_file(output_dir, common, sim, sim_thres, threshold, variant_coverage)[
+            'accession'].unique().tolist()
+
+        # Initialize dictionary for statistics
+        subset_stats = {}
+
+        # Compute statistics for each accession
+        for accession in accession_list:
+            subset_stats[accession] = calculate_accession_common_dataset_stats(accession, common, sim, sim_thres,
+                                                                               threshold, variant_coverage, output_dir)
+        # Make a dataframe
+        stats_df = pd.DataFrame(subset_stats).T
+        stats_df.reset_index(inplace=True)
+        stats_df.rename(columns={'index': 'accession'}, inplace=True)
+
+        # Write output file
+        stats_df.to_csv(output_fle, sep='\t', index=False)
+
+    else:
+        stats_df = pd.read_csv(output_fle, sep='\t')
+
+    return stats_df
 
 def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: int, threshold: int, variant_coverage: float,
                              min_subset_n: int = 50, thres_error_mean: float = 0.5, error_mean_limit: str = 'min'):
