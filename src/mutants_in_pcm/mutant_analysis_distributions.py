@@ -2,7 +2,7 @@ import os
 import json
 import pandas as pd
 from scipy.stats import wasserstein_distance
-from .mutant_analysis_common_subsets import read_common_subset,get_filename_tag,read_common_subset_stats_file
+from .mutant_analysis_common_subsets import read_common_subset,get_filename_tag,read_common_subset_stats_file,calculate_accession_common_dataset_stats
 
 def compute_variant_wasserstein_distance(accession: str, common: bool, sim: bool, sim_thres: int,
                                 threshold: int, variant_coverage: float, output_dir: str):
@@ -110,10 +110,17 @@ def compute_subset_wasserstein_distance(accession: str, subset_1_dict: dict,
             else:
                 w_distances[variant] = wasserstein_distance(var_bioactivity_1, var_bioactivity_2)
 
-        w_distances['variant_n_difference'] = len(variant_n_difference)
-        w_distances['dataset_size_difference'] = dataset_size_difference
-        w_distances['dataset_size_smallest'] = min(len(common_subset_1), len(common_subset_2))
-        w_distances['dataset_size_largest'] = max(len(common_subset_1), len(common_subset_2))
+        # Calculate additional statistics to report differences between datasets
+        subset_1_stats = calculate_accession_common_dataset_stats(accession, **subset_1_dict, output_dir=output_dir)
+        subset_2_stats = calculate_accession_common_dataset_stats(accession, **subset_2_dict, output_dir=output_dir)
+        # Add additional statistics to dictionary
+        stats_to_add = ['variant_n','dataset_size','unique_compounds','mutant_ratio','sparsity','balance_score']
+        for key, value in subset_1_stats.items():
+            if key in stats_to_add:
+                w_distances[f'{key}_set1'] = value
+        for key, value in subset_2_stats.items():
+            if key in stats_to_add:
+                w_distances[f'{key}_set2'] = value
 
         # Save dictionary
         with open(output_file, 'w') as f:
@@ -237,8 +244,12 @@ def calculate_wasserstein_variant_average(w_distances: dict):
 
     # Compute average distance
     for variant, distance in w_distances.items():
-        if ('WT' not in variant) and (variant not in ['variant_n_difference','dataset_size_difference',
-                                                      'dataset_size_smallest','dataset_size_largest']):
+        if ('WT' not in variant) and (variant not in ['variant_n_set1','dataset_size_set1',
+                                                      'unique_compounds_set1','mutant_ratio_set1',
+                                                      'sparsity_set1','balance_score_set1','variant_n_set2',
+                                                      'dataset_size_set2','unique_compounds_set2',
+                                                      'mutant_ratio_set2','sparsity_set2',
+                                                      'balance_score_set2']):
             distances.append(distance)
     try:
         average = sum(distances)/len(distances)
@@ -316,13 +327,19 @@ def wasserstein_distance_dual_statistics(subset_1_dict: dict,
             except KeyError:
                 w_distances_stats[accession]['WT'] = None
             w_distances_stats[accession]['mutants_avg'] = calculate_wasserstein_variant_average(w_distances)
-            w_distances_stats[accession]['variant_n_difference'] = w_distances['variant_n_difference']
-            w_distances_stats[accession]['dataset_size_difference'] = w_distances['dataset_size_difference']
-            w_distances_stats[accession]['dataset_size_smallest'] = w_distances['dataset_size_smallest']
-            w_distances_stats[accession]['dataset_size_largest'] = w_distances['dataset_size_largest']
+            # Report the rest of the statistics
+            order_keys = ['variant_n_set1','variant_n_set2',
+                           'dataset_size_set1','dataset_size_set2',
+                            'unique_compounds_set1','unique_compounds_set2',
+                           'mutant_ratio_set1','mutant_ratio_set2',
+                           'sparsity_set1','sparsity_set2',
+                           'balance_score_set1','balance_score_set2']
+            for key in order_keys:
+                w_distances_stats[accession][key] = w_distances[key]
 
         # Make dataframe from dictionary
-        w_distances_stats_df = pd.DataFrame.from_dict(w_distances_stats, orient='index')
+        w_distances_stats_df = pd.DataFrame.from_dict(w_distances_stats, orient='index').sort_values(
+            by='dataset_size_set2', ascending=False)
         print(w_distances_stats_df)
 
         # Save dataframe
