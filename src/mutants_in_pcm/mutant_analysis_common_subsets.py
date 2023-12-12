@@ -5,6 +5,7 @@
 """Computing and analyzing bioacivity distributions for common subsets per accession"""
 import json
 import math
+import statistics
 import os
 
 import pandas as pd
@@ -368,7 +369,12 @@ def read_common_subset(accession: str, common: bool, sim: bool, sim_thres: int,
         data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
                                                f'modelling_dataset_{ accession}_All.csv'), sep='\t')
     else:
-        data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
+        if not sim:
+            data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
+                                                   f'modelling_dataset_{accession}_Thr{threshold}_Cov'
+                                                              f'{int(variant_coverage*100)}.csv'), sep='\t')
+        else:
+            data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
                                                f'modelling_dataset_{accession}_Thr{threshold}_Cov'
                                                           f'{int(variant_coverage*100)}_Sim'
                                                           f'{int(sim_thres*100)}.csv'), sep='\t')
@@ -781,6 +787,54 @@ pd.DataFrame, aggregate: bool = True):
         return aggregated_df
     else:
         return stats_enriched
+
+def calculate_accession_common_dataset_stats(accession: str, common: bool, sim: bool, sim_thres: int, threshold: int,
+                                             variant_coverage: float, output_dir: str):
+    """
+    Calculate statistics of the common subset for modelling for each accession. The difference with the function
+    calculate_accession_common_subset_stats is that this function calculates statistics for the modelling dataset
+    and focuses on the number of datapoints, while the other function focuses on the number of unique compounds.
+    :param accession: Uniprot accession code
+    :param common: Whether to use common subset for variants
+    :param sim: Whether to include similar compounds in the definition of the common subset
+    :param sim_thres: Similarity threshold (Tanimoto) if similarity is used for common subset
+    :param threshold: Minimum number of variants in which a compound has been tested in order to be included in the
+                    common subset
+    :param variant_coverage: Minimum ratio of the common subset of compounds that have been tested on a variant in order
+                            to include that variant in the output
+    :param output_dir: Location for the modelling dataset files
+    """
+    # Read modelling common dataset
+    common_subset = read_common_subset(accession, common, sim, sim_thres, threshold, variant_coverage, output_dir)
+
+    # Initialize dictionary for statistics
+    subset_stats = {}
+
+    # Compute statistics
+    variant_n = len(common_subset['target_id'].unique())
+    dataset_size = len(common_subset[common_subset['pchembl_value_Mean'].notna()])
+    wt_dataset_size = len(common_subset[(common_subset['pchembl_value_Mean'].notna()) &
+                                        (common_subset['target_id'] == f'{accession}_WT')])
+    unique_compounds = common_subset['connectivity'].nunique()
+    full_matrix_size = variant_n * unique_compounds
+    variant_coverage = {}
+    for variant in common_subset['target_id'].unique():
+        variant_dataset_size = len(common_subset[(common_subset['pchembl_value_Mean'].notna()) &
+                                                    (common_subset['target_id'] == variant)])
+        variant_coverage[variant] = variant_dataset_size / unique_compounds
+
+    subset_stats['variant_n'] = variant_n
+    subset_stats['dataset_size'] = dataset_size
+    subset_stats['full_matrix_size'] = full_matrix_size
+    subset_stats['unique_compounds'] = unique_compounds
+    subset_stats['mutant_ratio'] = 1 - (wt_dataset_size / dataset_size)
+    subset_stats['variant_coverage'] = variant_coverage
+    subset_stats['sparsity'] = 1 - (dataset_size / full_matrix_size)
+    subset_stats['balance_score'] = statistics.mean(list(variant_coverage.values()))
+
+
+    return subset_stats
+
 
 def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: int, threshold: int, variant_coverage: float,
                              min_subset_n: int = 50, thres_error_mean: float = 0.5, error_mean_limit: str = 'min'):
