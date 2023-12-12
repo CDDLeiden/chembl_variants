@@ -763,7 +763,7 @@ pd.DataFrame, aggregate: bool = True):
                 d['undefined_mutants'] = True
             else:
                 d['undefined_mutants'] = False
-            d['common_subset_size'] = int(list(x['n_accession'])[0]) # Number of datapoints/compounds in the common
+            d['common_subset_size'] = int(list(x['n_accession'])[0]) # Number of unique compounds in the common
             # subset
             d['accession_set_size'] = int(list(x['connectivity'])[0]) # Number of datapoints (not unique compounds)
             # in the full accession set
