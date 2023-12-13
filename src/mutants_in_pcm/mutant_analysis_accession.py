@@ -137,35 +137,48 @@ def get_statistics_across_accessions(chembl_version: str, papyrus_version: str, 
     :param save: whether to save results to file
     :return: pd.DataFrame with statistics. Each row is one protein (accession)
     """
-    # Read mutant annotated ChEMBL + Papyrus data
-    data = merge_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor, chunksize, annotation_round)
+    output_file = os.path.join(output_dir, f'stats_per_accession_round{annotation_round}.txt')
 
-    # Extract Organism and gene names
-    data_organism = data.drop_duplicates(subset=['accession'])[['accession', 'Organism', 'HGNC_symbol']]
+    if not os.path.exists(output_file):
+        # Read mutant annotated ChEMBL + Papyrus data
+        data = merge_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor, chunksize, annotation_round)
 
-    # Compute number of WT activity datapoints per accession
-    stats_activity_wt = data[data['target_id'].str.contains('_WT')].groupby(['accession'])['connectivity'].nunique() \
-        .reset_index().rename(columns={'connectivity': 'connectivity_wt'})
-    # Compute total number of activity datapoints per accession
-    stats_activity = data.groupby(['accession'])['connectivity'].count().reset_index()
-    # Compute number of unique mutants per accession
-    stats_variants = data.groupby(['accession'])['target_id'].nunique().reset_index()
-    # Merge all stats making sure that accession without WT activity are included
-    stats = pd.merge(pd.merge(stats_activity, stats_activity_wt, how='left', on='accession').fillna(0), stats_variants,
-                     on='accession')
-    # Calculate percentage of mutant activity datapoints (1-WT/total)*100
-    stats['connectivity_mutant_percentage'] = (1 - stats['connectivity_wt'] / stats['connectivity']) * 100
+        # Extract Organism and gene names
+        data_organism = data.drop_duplicates(subset=['accession'])[['accession', 'Organism', 'HGNC_symbol']]
 
-    # Merge with ChEMBL family classifications (L1-L5)
-    chembl_families = group_families(obtain_chembl_family(chembl_version=chembl_version))
-    stats_family = pd.merge(stats, chembl_families, on='accession')
-    # Merge with organism and gene names
-    stats_family_tax = pd.merge(stats_family, data_organism, on='accession')
+        # Compute number of WT activity datapoints per accession
+        stats_activity_wt = (data[data['target_id'].str.contains('_WT')].groupby(['accession'])['connectivity'].nunique().
+                             reset_index().rename(columns={'connectivity': 'n_data_wt'}))
 
-    # Save results
-    if save:
-        stats_family_tax.to_csv(os.path.join(output_dir, f'stats_per_accession_round{annotation_round}.txt'), sep='\t',
-                                index=False)
+        # Compute total number of activity datapoints per accession
+        stats_activity = (data.groupby(['accession'])['connectivity'].count().
+                          reset_index().rename(columns={'connectivity': 'n_data'}))
+        # Compute number of unique compounds per accession
+        stats_compounds = (data.groupby(['accession'])['connectivity'].nunique().
+                           reset_index().rename(columns={'connectivity': 'n_compounds'}))
+        # Compute number of unique mutants per accession
+        stats_variants = (data.groupby(['accession'])['target_id'].nunique().
+                          reset_index().rename(columns={'target_id': 'n_variants'}))
+        # Merge all stats making sure that accession without WT activity are included
+        stats = pd.merge(pd.merge(pd.merge(stats_activity, stats_activity_wt, how='left', on='accession').fillna(0),
+                          stats_variants,on='accession'),stats_compounds,on='accession')
+        # Calculate percentage of mutant activity datapoints (1-WT/total)*100
+        stats['data_mutant_percentage'] = (1 - stats['n_data_wt'] / stats['n_data']) * 100
+
+        # Merge with ChEMBL family classifications (L1-L5)
+        chembl_families = group_families(obtain_chembl_family(chembl_version=chembl_version))
+        stats_family = pd.merge(stats, chembl_families, on='accession')
+        # Merge with organism and gene names
+        stats_family_tax = pd.merge(stats_family, data_organism, on='accession')
+
+        # Make sure type is correct
+        stats_family_tax['n_data_wt'] = stats_family_tax['n_data_wt'].astype(int)
+
+        # Save results
+        if save:
+            stats_family_tax.to_csv(output_file, sep='\t',index=False)
+    else:
+        stats_family_tax = pd.read_csv(output_file, sep='\t')
 
     return stats_family_tax
 
@@ -190,20 +203,20 @@ def get_statistics_across_variants(chembl_version: str, papyrus_version: str, pa
 
     # Compute number of activity datapoints per variant
     stats_variant_activity = data.groupby(['accession', 'target_id'])['connectivity'].count().reset_index().rename \
-        (columns={'connectivity': 'connectivity_variant', 'target_id': 'variant'})
+        (columns={'connectivity': 'n_data_target_id'})
 
     # Merge with accession statistics
     stats_variant = pd.merge(stats_variant_activity, stats, on='accession')
 
     # Calculate percentage of variant activity datapoints (variant/total)*100
-    stats_variant['connectivity_variant_percentage'] = (stats_variant['connectivity_variant'] /
-                                                        stats_variant['connectivity']) * 100
+    stats_variant['data_variant_coverage'] = (stats_variant['n_data_target_id'] /
+                                                        stats_variant['n_data'])
     # Define variant order from most to least populated
-    stats_variant['variant_order'] = stats_variant.sort_values(by='connectivity_variant', ascending=False).groupby \
+    stats_variant['variant_order'] = stats_variant.sort_values(by='n_data_target_id', ascending=False).groupby \
                                          (['accession']).cumcount() + 1
     # Calculate fold difference between the most populated variant and the rest per accession
     # (i.e. most populated variant has X times more data than the second/third/etc most populated variant
-    stats_variant['connectivity_variant_fold'] = stats_variant.groupby(['accession'])['connectivity_variant'] \
+    stats_variant['data_variant_fold'] = stats_variant.groupby(['accession'])['n_data_target_id'] \
         .transform(lambda x: x.max() / x)
 
     # Save results
@@ -214,7 +227,7 @@ def get_statistics_across_variants(chembl_version: str, papyrus_version: str, pa
     return stats_variant
 
 def filter_statistics(stats: pd.DataFrame, min_data: int, max_data: int,
-                      min_percentage: float, max_perccentage: float,
+                      min_percentage: float, max_percentage: float,
                       min_variants: int, max_variants: int,
                       sort_output_by:str):
     """
@@ -224,27 +237,27 @@ def filter_statistics(stats: pd.DataFrame, min_data: int, max_data: int,
     :param min_data: minimum number of bioactivity data points
     :param max_data: maximum number of bioactivity data points
     :param min_percentage: minimum percentage of mutants
-    :param max_perccentage: maximum percentage of mutants
+    :param max_percentage: maximum percentage of mutants
     :param min_variants: minimum number of variants
     :param max_variants: maximum number of variants
     :return: filtered dataframe
     """
     # Select maximum values if no maximum is provided
     if max_data is None:
-        max_data = stats['connectivity'].max()
+        max_data = stats['n_data'].max()
     if max_variants is None:
-        max_variants = stats['target_id'].max()
-    if max_perccentage is None:
-        max_perccentage = stats['connectivity_mutant_percentage'].max()
+        max_variants = stats['n_variants'].max()
+    if max_percentage is None:
+        max_perccentage = stats['data_mutant_percentage'].max()
 
     # Filter data
-    filtered_stats = stats[(stats['connectivity'] >= min_data) &
-                             (stats['connectivity'] <= max_data) &
-                             (stats['target_id'] >= min_variants) &
-                            (stats['target_id'] <= max_variants) &
-                           (stats['connectivity_mutant_percentage'] >=  min_percentage)
-                             & (stats['connectivity_mutant_percentage'] <= max_perccentage)
-                           & (stats['connectivity_mutant_percentage'] != 100.0)]
+    filtered_stats = stats[(stats['n_data'] >= min_data) &
+                             (stats['n_data'] <= max_data) &
+                             (stats['n_variants'] >= min_variants) &
+                            (stats['n_variants'] <= max_variants) &
+                           (stats['data_mutant_percentage'] >=  min_percentage)
+                             & (stats['data_mutant_percentage'] <= max_perccentage)
+                           & (stats['data_mutant_percentage'] != 100.0)]
 
     # Sort output
     filtered_stats.sort_values(by=sort_output_by, ascending=False, inplace=True)
@@ -272,7 +285,7 @@ def plot_stats_bubble(stats: pd.DataFrame, filter_tag: str, hue_property: str, h
     :param hue_property: property to use for coloring the bubbles
     :param hue_title: title to use for the color legend
     :param label_condition: condition to use for labeling the bubbles.
-        Options are 'connectivity' and 'coonecitivity_mutant_percentage'
+        Options are 'n_data' and 'data_mutant_percentage'
     :param xy_lims: list with x and y limits (tuples) for the plot
     :param output_dir: directory to save results to
     :param save: whether to save results to file
@@ -285,9 +298,9 @@ def plot_stats_bubble(stats: pd.DataFrame, filter_tag: str, hue_property: str, h
 
     # Create plot
     g = sns.scatterplot(data=stats,
-                        x='target_id',
-                        y='connectivity',
-                        size='connectivity_mutant_percentage',
+                        x='n_variants',
+                        y='n_data',
+                        size='data_mutant_percentage',
                         hue=hue_property,
                         palette="viridis",
                         alpha=0.6,
@@ -298,7 +311,7 @@ def plot_stats_bubble(stats: pd.DataFrame, filter_tag: str, hue_property: str, h
     h, l = g.get_legend_handles_labels()
     l_modified = copy.deepcopy(l)
     l_modified[0] = hue_title
-    l_size_index = l.index('connectivity_mutant_percentage')
+    l_size_index = l.index('data_mutant_percentage')
     l_modified[l_size_index] = 'Mutant bioactivity %'
     g.legend(h, l_modified, loc='center left', bbox_to_anchor=(1.05, 0.5), ncol=1)
 
@@ -315,20 +328,20 @@ def plot_stats_bubble(stats: pd.DataFrame, filter_tag: str, hue_property: str, h
     plt.xlabel('Number of variants')
 
     # Add text labels
-    if label_condition == 'connectivity':
+    if label_condition == 'n_data':
         # Option 1: for accessions with high number of mutants and bioactivity data points
-        [plt.text(x=row['target_id'] + 0.25, y=row['connectivity'], s=row['accession'], size=11) for k, row in stats
-            .iterrows() if (row.connectivity > 10000 or row.target_id > 20)]
-    elif label_condition == 'connectivity_mutant_percentage':
+        [plt.text(x=row['n_variants'] + 0.25, y=row['n_data'], s=row['accession'], size=11) for k, row in stats
+            .iterrows() if (row['n_data'] > 10000 or row['n_variants'] > 20)]
+    elif label_condition == 'data_mutant_percentage':
         # Option 2: for accessions with high percentage of mutants (applied when zooming in, so no labels outside of
         # axis limits)
         if xy_lims is None:
-            [plt.text(x=row['target_id'] + 0.25, y=row['connectivity'], s=row['accession'], size=11) for k, row in
-             stats.iterrows() if (row.connectivity_mutant_percentage > 10) and 500 < row.connectivity]
+            [plt.text(x=row['n_variants'] + 0.25, y=row['n_data'], s=row['accession'], size=11) for k, row in
+             stats.iterrows() if (row['data_mutant_percentage'] > 10) and 500 < row['n_data']]
         else:
-            [plt.text(x=row['target_id'] + 0.25, y=row['connectivity'], s=row['accession'], size=11) for k, row in
-             stats.iterrows() if (row.connectivity_mutant_percentage > 10 and 500 < row.connectivity < xy_lims[1][1] and
-                                  row.target_id < xy_lims[0][1])]
+            [plt.text(x=row['n_variants'] + 0.25, y=row['n_data'], s=row['accession'], size=11) for k, row in
+             stats.iterrows() if (row['data_mutant_percentage'] > 10 and 500 < row['n_data'] < xy_lims[1][1] and
+                                  row['n_variants'] < xy_lims[0][1])]
     # Save plot
     if save:
         if xy_lims is None:
@@ -352,27 +365,27 @@ def plot_stats_histograms(stats: pd.DataFrame, output_dir:str, save: bool = Fals
     sns.set_context("paper", font_scale=2)
 
     # Plot 1
-    sns.histplot(stats, x='connectivity',
+    sns.histplot(stats, x='n_data',
              bins=10,log_scale=True,color='#365c8d')
     plt.xlabel('Number of bioactivity datapoints (log)')
     if save:
-        plt.savefig(os.path.join(output_dir, 'histogram_n_bioactivity_log.svg'))
+        plt.savefig(os.path.join(output_dir, 'histogram_n_data_log.svg'))
         plt.clf()
     else:
         plt.show()
 
     # Plot 2
-    sns.histplot(stats, x='connectivity_mutant_percentage',
+    sns.histplot(stats, x='data_mutant_percentage',
                  bins=10,log_scale=False,color='#277f8e')
     plt.xlabel('Mutant bioactivity %')
     if save:
-        plt.savefig(os.path.join(output_dir, 'histogram_ratio_mut_bioactivity.svg'))
+        plt.savefig(os.path.join(output_dir, 'histogram_data_mutant_percentage.svg'))
         plt.clf()
     else:
         plt.show()
 
     # Plot 3
-    sns.histplot(stats, x='target_id',
+    sns.histplot(stats, x='n_variants',
                  bins=10,log_scale=False,color='#4ac16d')
     plt.xlabel('Number of variants')
     if save:
@@ -382,37 +395,37 @@ def plot_stats_histograms(stats: pd.DataFrame, output_dir:str, save: bool = Fals
         plt.show()
 
     # Plot 4
-    sns.histplot(stats, x='connectivity', y='connectivity_mutant_percentage',
+    sns.histplot(stats, x='n_data', y='data_mutant_percentage',
                  bins=10, discrete=(False, False), log_scale=(True, False), color='#1fa187',
         cbar=True, cbar_kws=dict(shrink=.75))
     plt.xlabel('Number of bioactivity datapoints (log)')
     plt.ylabel('Mutant bioactivity %')
     if save:
-        plt.savefig(os.path.join(output_dir, 'histogram_n_bioactivity_ratio_mut.svg'))
+        plt.savefig(os.path.join(output_dir, 'histogram_n_data_mutant_percentage.svg'))
         plt.clf()
     else:
         plt.show()
 
     # plot 5
-    sns.histplot(stats, x='target_id', y='connectivity_mutant_percentage',
+    sns.histplot(stats, x='n_variants', y='data_mutant_percentage',
                  bins=10, discrete=(False, False), log_scale=(False, False), color='#a0da39',
         cbar=True, cbar_kws=dict(shrink=.75))
     plt.xlabel('Number of variants')
     plt.ylabel('Mutant bioactivity %')
     if save:
-        plt.savefig(os.path.join(output_dir, 'histogram_n_variants_ratio_mut.svg'))
+        plt.savefig(os.path.join(output_dir, 'histogram_n_variants_mutant_percentage.svg'))
         plt.clf()
     else:
         plt.show()
 
     # Plot 6
-    sns.histplot(stats, x='connectivity', y='target_id',
+    sns.histplot(stats, x='n_data', y='n_variants',
                  bins=10, discrete=(False, False), log_scale=(True, False), color='#46327e',
         cbar=True, cbar_kws=dict(shrink=.75))
     plt.xlabel('Number of bioactivity datapoints (log)')
     plt.ylabel('Number of variants')
     if save:
-        plt.savefig(os.path.join(output_dir, 'histogram_n_bioactivity_n_variants.svg'))
+        plt.savefig(os.path.join(output_dir, 'histogram_n_data_n_variants.svg'))
         plt.clf()
     else:
         plt.show()
@@ -437,7 +450,7 @@ def plot_variant_stats_lineplot(stats: pd.DataFrame, filter_tag:str, y_column:st
 
     # Create a column with accession and percentage for hue
     stats['accession_percentage'] = stats.\
-        apply(lambda x: f'{x.accession} ({round(x.connectivity_mutant_percentage, 2)}%)', axis=1)
+        apply(lambda x: f'{x.accession} ({round(x["data_mutant_percentage"], 2)}%)', axis=1)
 
     # Pivot data using variable of interest
     stats_plot = stats.pivot(index='variant_order', columns='accession_percentage',
@@ -470,13 +483,13 @@ def plot_variant_stats_lineplot(stats: pd.DataFrame, filter_tag:str, y_column:st
     else:
         plt.show()
 
-def plot_variant_fold_change_stats(stats:pd.DataFrame, filter_tag:str, variant_n:int, x_column:str, x_label:str,
+def plot_variant_fold_change_stats(stats:pd.DataFrame, filter_tag:str, variant_i:int, x_column:str, x_label:str,
                                    size_column:str,size_label:str, color:str, output_dir:str, save: bool = False):
     """
     Plot a bubbleplot for the variant statistics dataframe.
     :param stats: dataframe with statistics
     :param filter_tag: tag to identify filtered data on in output file name. Strats wit '_' if not empty
-    :param variant_n: variant number to plot fold change of most populated variant respect to
+    :param variant_i: variant number to plot fold change of most populated variant respect to
     :param x_column: column to plot on x-axis
     :param x_label: label for x-axis
     :param size_column: column to base size of bubbles on
@@ -492,15 +505,15 @@ def plot_variant_fold_change_stats(stats:pd.DataFrame, filter_tag:str, variant_n
     sns.set_context("talk")
 
     # Select to plot data for the variant of interest
-    stats = stats[stats['variant_order'] == variant_n]
+    stats = stats[stats['variant_order'] == variant_i]
 
     # Plot bubbleplot
-    sns.scatterplot(data=stats, x=x_column, y='connectivity_variant_fold', size=size_column,
+    sns.scatterplot(data=stats, x=x_column, y='data_variant_fold', size=size_column,
                     color=color, alpha=0.5, sizes=(10, 300))
 
     # Add axes labels
     ordinal = lambda n: "%d%s" % (n, "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10::4])
-    plt.ylabel(f'Relative amount of data\nin most populated variant\ncompared to {ordinal(variant_n)}')
+    plt.ylabel(f'Relative amount of data\nin most populated variant\ncompared to {ordinal(variant_i)}')
     plt.xlabel(x_label)
 
     # Change legend title
@@ -508,4 +521,4 @@ def plot_variant_fold_change_stats(stats:pd.DataFrame, filter_tag:str, variant_n
 
     # Save plot
     if save:
-        plt.savefig(os.path.join(output_dir, f'variant_1_to_{variant_n}_ratio_{size_column}{filter_tag}.svg'))
+        plt.savefig(os.path.join(output_dir, f'variant_1_to_{variant_i}_ratio_{size_column}{filter_tag}.svg'))
