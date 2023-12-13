@@ -320,11 +320,15 @@ def read_common_subset(accession: str, common: bool, sim: bool, sim_thres: int,
     """
     # Customize filename tags based on function options for subdirectories
     options_filename_tag = get_filename_tag(common, sim, sim_thres, threshold,variant_coverage)
+
     # Read bioactivity data for common subset precalculated
-
-    data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
+    try:
+        data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
                                              f'modelling_dataset_{accession}_{options_filename_tag}.csv'), sep='\t')
-
+    except FileNotFoundError:
+        raise FileNotFoundError(f'No common subset dataset found for {options_filename_tag}. '
+                                f'Please run compute_variant_activity_distribution first with '
+                                f'save_dataset=True.')
     return data_common
 
 
@@ -467,7 +471,7 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
     options_filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
 
     # Check in output stats or dataset file if this accession was already analyzed. If so, skip analysis.
-    stat_file = os.path.join(output_dir, options_filename_tag, f'stats_file_{options_filename_tag}.txt')
+    stat_file = os.path.join(output_dir, options_filename_tag, f'stats_distribution_{options_filename_tag}.txt')
     dataset_file = os.path.join(output_dir, options_filename_tag,
                                 f'modelling_dataset_{accession}_{options_filename_tag}.csv')
 
@@ -544,13 +548,16 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 if common:
                     if variant_coverage is not None:
                         if sim:
-                            options_legend_tag = f'Common subset (+ similars) n={len(data_accession["connectivity"].unique().tolist())}\n(> {variant_coverage * 100} % coverage)'
+                            options_legend_tag = (f'Common subset unique (+ similars) n'
+                                                  f'={len(data_accession["connectivity"].unique().tolist())}\n(> {variant_coverage * 100} % coverage)')
                         else:
-                            options_legend_tag = f'Common subset n={len(data_accession["connectivity"].unique().tolist())}\n(> {variant_coverage*100} % coverage)'
+                            options_legend_tag = (f'Common subset unique n'
+                                                  f'={len(data_accession["connectivity"].unique().tolist())}\n(> {variant_coverage*100} % coverage)')
                     else:
-                        options_legend_tag = f'Common subset n={len(data_accession["connectivity"].unique().tolist())}\n(Not defined coverage)'
+                        options_legend_tag = (f'Common subset unique n'
+                                              f'={len(data_accession["connectivity"].unique().tolist())}\n(Not defined coverage)')
                 else:
-                    options_legend_tag = f'Full set n={len(data_accession["connectivity"].unique().tolist())}'
+                    options_legend_tag = f'Full set unique n={len(data_accession["connectivity"].unique().tolist())}'
 
                 g._legend.set_title(f'{accession} variants\n{options_legend_tag}')
                 sns.move_legend(g, bbox_to_anchor=(0.75, 0.5), loc='center left')
@@ -558,10 +565,12 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 plt.xlim(2, 12)
 
                 # Write figure
-                plt.savefig(os.path.join(output_dir,options_filename_tag,
+                if not os.path.exists(os.path.join(output_dir, options_filename_tag, 'distribution_plots')):
+                    os.makedirs(os.path.join(output_dir, options_filename_tag, 'distribution_plots'))
+                plt.savefig(os.path.join(output_dir,options_filename_tag,'distribution_plots',
                                          f'variant_activity_distribution_{accession}_{options_filename_tag}.png'),
                                          bbox_inches='tight', dpi=300)
-                plt.savefig(os.path.join(output_dir,options_filename_tag,
+                plt.savefig(os.path.join(output_dir,options_filename_tag,'distribution_plots',
                                          f'variant_activity_distribution_{accession}_{options_filename_tag}.svg'))
 
                 # Write stats output file
@@ -582,8 +591,8 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                              'mean_error':mean_error_list,
                              'mean_error_strict':mean_error_strict_list,
                              'std_error_strict':std_error_strict_list,
-                             'n_accession':n_accession_list,
-                             'n_target_id':n_target_id_list,
+                             'n_compounds_accession':n_accession_list,
+                             'n_compounds_target_id':n_target_id_list,
                              'coverage':coverage_list}
 
                 stat_df = pd.DataFrame(stat_dict)
@@ -612,10 +621,10 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                             else:
                                 file.write(f'Skipping accession {accession}\n')
 
-def read_common_subset_stats_file(file_dir: str, common: bool, sim: bool, sim_thres: int, threshold: int,
+def read_bioactivity_distribution_stats_file(file_dir: str, common: bool, sim: bool, sim_thres: int, threshold: int,
                                variant_coverage: float):
     """
-    Read the stats file produced while plotting
+    Read the bioactivity distribution stats file produced while plotting
     :param file_dir: Location of the stats file
     :param common: Whether to use common subset for variants
     :param sim: Whether to include similar compounds in the definition of the common subset
@@ -627,11 +636,11 @@ def read_common_subset_stats_file(file_dir: str, common: bool, sim: bool, sim_th
     :return: pd.DataFrame with the stats
     """
     filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
-    if not os.path.exists(os.path.join(file_dir, filename_tag, f'stats_file_{filename_tag}.txt')):
+    if not os.path.exists(os.path.join(file_dir, filename_tag, f'stats_distribution_variant_{filename_tag}.txt')):
         raise FileNotFoundError(f'No stats file found for {filename_tag}. '
                                 f'Please run main.py first.')
     else:
-        stat_df = pd.read_csv(os.path.join(file_dir, filename_tag, f'stats_file_{filename_tag}.txt'), sep='\t')
+        stat_df = pd.read_csv(os.path.join(file_dir, filename_tag, f'stats_distribution_variant_{filename_tag}.txt'), sep='\t')
         stat_df.drop_duplicates(['accession', 'target_id'], inplace=True)
 
         return stat_df
@@ -661,7 +670,8 @@ def check_common_subset_status(chembl_version: str, papyrus_version: str, papyru
                                            annotation_round)
 
     # Check how many proteins have been successfully processed and recorded on the stats file
-    common_stat = read_common_subset_stats_file(file_dir, common, sim, sim_thres, threshold, variant_coverage)
+    common_stat = read_bioactivity_distribution_stats_file(file_dir, common, sim, sim_thres, threshold,
+                                                           variant_coverage)
     n_proteins_processed = len(common_stat['accession'].unique().tolist())
     print(f'{n_proteins_processed} out of {n_proteins} proteins have been successfully processed.')
 
@@ -693,7 +703,7 @@ def calculate_accession_common_dataset_stats(accession: str, common: bool, sim: 
     """
     Calculate statistics of the common subset for modelling for each accession. Note that this function calculates
     statistics for the modelling dataset and focuses on the number of datapoints, while other statistics calculated
-    for the bioactivity distribution focus on the number of unique compounds.
+    for the bioactivity distribution focus report the number of unique compounds.
     :param accession: Uniprot accession code
     :param common: Whether to use common subset for variants
     :param sim: Whether to include similar compounds in the definition of the common subset
@@ -756,7 +766,8 @@ def calculate_accession_common_dataset_stats_all(common: bool, sim: bool, sim_th
 
     if not os.path.exists(output_fle):
         # Read stats file and extract accession codes
-        accession_list = read_common_subset_stats_file(output_dir, common, sim, sim_thres, threshold, variant_coverage)[
+        accession_list = read_bioactivity_distribution_stats_file(output_dir, common, sim, sim_thres, threshold,
+                                                                  variant_coverage)[
             'accession'].unique().tolist()
 
         # Initialize dictionary for statistics
@@ -826,7 +837,7 @@ pd.DataFrame):
 def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: int, threshold: int, variant_coverage: float,
                              min_subset_n: int = 50, thres_error_mean: float = 0.5, error_mean_limit: str = 'min'):
     """
-    Explore the stats file produced while plotting and extract the most interesting targets from it
+    Explore the file with bioactivity distribution statistics and extract the most interesting targets from it
     :param file_dir: Location of the stats file
     :param common: Whether to use common subset for variants
     :param sim: Whether to include similar compounds in the definition of the common subset
@@ -835,7 +846,7 @@ def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: 
                     common subset
     :param variant_coverage: Minimum ratio of the common subset of compounds that have been tested on a variant in order
                             to include that variant in the output
-    :param min_subset_n: Minimum number of compounds in the target (sub)set
+    :param min_subset_n: Minimum number of unique compounds in the target (sub)set
     :param thres_error_mean: Threshold to satisfy error condition
     :param error_mean_limit: Error conditions: 'min': select targets with at least 1 variant with a mean pchembl value
                                                         difference to WT bigger than the minimum threshold
@@ -849,11 +860,13 @@ def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: 
     :return: pd.DataFrame statistics for the accession codes that satisfy the input conditions
     """
     filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
-    stat_df = pd.read_csv(os.path.join(file_dir, filename_tag, f'stats_file_{filename_tag}.txt'), sep='\t')
+    stat_df =  pd.read_csv(os.path.join(file_dir, filename_tag,
+                                        f'stats_distribution_variant_{filename_tag}.txt'),
+                           sep='\t')
     stat_df.drop_duplicates(['accession','target_id'], inplace=True)
 
-    # Extract accession code with subset size bigger than min_subset
-    accession_max_subset = stat_df[stat_df['n_accession'] > min_subset_n]['accession'].unique().tolist()
+    # Extract accession codes with  more unique compounds than min_subset
+    accession_max_subset = stat_df[stat_df['n_compounds_accession'] > min_subset_n]['accession'].unique().tolist()
 
     # Extract accession codes that satisfy the defined error to WT conditions (A-D):
     mean_error_list = stat_df.groupby(['accession'])['mean_error'].apply(list).reset_index()
@@ -881,18 +894,21 @@ def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: 
 
     print(f'{len(accession_keep)} targets satisfy the specified conditions:')
     if error_mean_limit == 'min':
-        print(stat_df_keep.groupby(['accession'])[['n_accession', 'mean_error']].apply(lambda x: x.abs().max()))
+        print(stat_df_keep.groupby(['accession'])[['n_compounds_accession', 'mean_error']].apply(lambda x: x.abs(
+
+        ).max()))
     elif error_mean_limit == 'max':
-        print(stat_df_keep[stat_df_keep['mean_error'] != 0].groupby(['accession'])['n_accession', 'mean_error'].
-              apply(lambda x: x.abs().min()))
+        print(stat_df_keep[stat_df_keep['mean_error'] != 0].groupby(['accession'])
+              ['n_compounds_accession', 'mean_error'].apply(lambda x: x.abs().min()))
     else:
-        print(stat_df_keep.groupby(['accession'])['n_accession','mean_error'].agg({'n_accession': 'max',
-                                                                                   'mean_error': 'std'}))
+        print(stat_df_keep.groupby(['accession'])
+              ['n_compounds_accession','mean_error'].agg({'n_compounds_accession': 'max',
+                                                          'mean_error': 'std'}))
 
     return stat_df_keep
 
-def read_bioactivity_distribution_stats(stats_dir: str, subset_type: str, accession: str):
-    """Read the stats file for the bioactivity distribution of a given target
+def read_multiple_bioactivity_distribution_stats(stats_dir: str, subset_type: str, accession: str):
+    """Read all available stats files for the bioactivity distribution of a given target
 
     :param stats_dir: Directory where the stats files are located
     :param subset_type: Type of subset used to generate the different stats files. Options: 'butina_clusters',
@@ -917,7 +933,7 @@ def read_bioactivity_distribution_stats(stats_dir: str, subset_type: str, access
             df['subset_tag'] = subset_tag
             df_list.append(df)
     elif subset_type == 'common_subsets':
-        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/stats_file*.txt')]
+        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/stats_distribution_variant*.txt')]
         for dir in dirs:
             df = pd.read_csv(dir, sep='\t')
             subset_tag = '_'.join(os.path.basename(dir).replace('.txt','').split('_')[2:])
@@ -1028,7 +1044,7 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
     :param output_dir: Directory to save the plot
     """
     # Read stats
-    df_accession = read_bioactivity_distribution_stats(stats_dir, subset_type, accession)
+    df_accession = read_bioactivity_distribution_stats_file(stats_dir, subset_type, accession)
     # Scale stats for bubble plotting
     df_accession = scale_bioactivity_distibution_stats(df_accession)
     # Prepare dataframe for bubble plotting

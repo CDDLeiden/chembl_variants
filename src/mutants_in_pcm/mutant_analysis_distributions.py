@@ -2,7 +2,7 @@ import os
 import json
 import pandas as pd
 from scipy.stats import wasserstein_distance
-from .mutant_analysis_common_subsets import read_common_subset,get_filename_tag,read_common_subset_stats_file,calculate_accession_common_dataset_stats
+from .mutant_analysis_common_subsets import read_common_subset,get_filename_tag,read_bioactivity_distribution_stats_file,calculate_accession_common_dataset_stats
 
 def compute_variant_wasserstein_distance(accession: str, common: bool, sim: bool, sim_thres: int,
                                 threshold: int, variant_coverage: float, output_dir: str):
@@ -159,7 +159,8 @@ def aggregate_variant_wasserstein_distances(common: bool, sim: bool, sim_thres: 
         w_distances_all = {}
 
         # Read statistics file of the common subset to get list of accessions
-        common_stat = read_common_subset_stats_file(output_dir, common, sim, sim_thres, threshold, variant_coverage)
+        common_stat = read_bioactivity_distribution_stats_file(output_dir, common, sim, sim_thres, threshold,
+                                                               variant_coverage)
         accession_list = common_stat['accession'].unique().tolist()
 
         # Read or compute all wasserstein distances for each protein
@@ -208,8 +209,8 @@ def aggregate_subset_wasserstein_distances(subset_1_dict: dict,
         w_distances_all = {}
 
         # Read statistics file of the common subset to get list of accessions
-        accession_list_1 = read_common_subset_stats_file(output_dir,**subset_1_dict)['accession'].unique().tolist()
-        accession_list_2 = read_common_subset_stats_file(output_dir,**subset_2_dict)['accession'].unique().tolist()
+        accession_list_1 = read_bioactivity_distribution_stats_file(output_dir, **subset_1_dict)['accession'].unique().tolist()
+        accession_list_2 = read_bioactivity_distribution_stats_file(output_dir, **subset_2_dict)['accession'].unique().tolist()
         # Keep shared accessions
         accession_list = list(set(accession_list_1).intersection(accession_list_2))
 
