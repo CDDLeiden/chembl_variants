@@ -822,6 +822,10 @@ def calculate_accession_common_dataset_stats(accession: str, common: bool, sim: 
         variant_dataset_size = len(common_subset[(common_subset['pchembl_value_Mean'].notna()) &
                                                     (common_subset['target_id'] == variant)])
         variant_coverage[variant] = variant_dataset_size / unique_compounds
+    if 'MUTANT' in [var.split('_')[1] for var in common_subset['target_id'].unique().tolist()]:
+        subset_stats['undefined_mutants'] = True
+    else:
+        subset_stats['undefined_mutants'] = False
 
     subset_stats['variant_n'] = variant_n
     subset_stats['dataset_size'] = dataset_size
