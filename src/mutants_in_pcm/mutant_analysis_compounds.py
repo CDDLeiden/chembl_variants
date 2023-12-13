@@ -699,23 +699,3 @@ def explore_cluster_compound_info(cluster_df_unique: pd.DataFrame,
         return stats
     elif output_type == 'df':
         return df.sort_values(by='cluster',ascending=True)
-
-if __name__ == '__main__':
-    annotation_round = 1
-    output_dir = f'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
-             f'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\1_mutant_statistics\\4_compound_clusters\\round' \
-                 f'_{annotation_round}'
-
-    # Plot distributions of bioactivities in most populated Butina clusters for targets with > 90 compounds in common
-    # subsets
-    for accession in ['P00533', 'Q72547', 'O75874','O60885','P00519','P07949','P10721','P13922','P15056','P22607',
-    'P30613','P36888','Q15910','Q5S007','Q9UM73']:
-        plot_bioactivity_distribution_cluster_subset(accession, annotation_round, output_dir)
-
-    # Plot distribution of bioactivities in most populated Butina clusters for targets with => 50% mutant bioactivity
-    # ratio
-    for accession in ['P15056', 'P23443', 'O75874', 'P13922', 'P30613', 'P01116', 'Q6P988', 'Q86WV6', 'P48735',
-                      'Q9P2K8', 'P21146', 'P48065', 'Q81R22', 'P07753', 'Q62120', 'Q15022', 'C1KIQ2', 'P36873',
-                      'Q5NGQ3', 'Q9QUR6', 'D5F1R0', 'P02511', 'P11678', 'P0DOF9', 'P56690', 'Q05320', 'P13738',
-                      'Q9NZN5', 'P15682', 'Q9NPD8']:
-        plot_bioactivity_distribution_cluster_subset(accession, annotation_round, output_dir)

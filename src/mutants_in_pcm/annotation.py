@@ -602,6 +602,3 @@ def chembl_annotation(chembl_version: str, annotation_round:str):
 
     return chembl_bioactivity_dataset
 
-if __name__ == "__main__":
-    pd.options.display.width = 0
-    chembl_annotation('31', annotation_round=1)

@@ -509,32 +509,3 @@ def plot_variant_fold_change_stats(stats:pd.DataFrame, filter_tag:str, variant_n
     # Save plot
     if save:
         plt.savefig(os.path.join(output_dir, f'variant_1_to_{variant_n}_ratio_{size_column}{filter_tag}.svg'))
-
-if __name__ == '__main__':
-    annotation_round = 1
-    output_dir = f'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
-                        f'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\1_mutant_statistics\\1_target_stats' \
-                 f'\\round_{annotation_round}'
-
-    # Define an accession to analyze
-    accession = 'P00533' # (EGFR)
-
-    # Read annotated bioactivity data for the accession of interest
-    accession_data = filter_accession_data(merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000,
-                                                                        annotation_round),accession)
-
-    # Read Papyrus data only, for comparison
-    papyrus_accession_data = filter_explore_activity_data('05.5', [accession])
-
-    # Define subsets for analysis
-    # All molecules that have been tested in the target of interest
-    accession_subset = accession_data['connectivity'].unique().tolist()
-    papyrus_accession_subset = papyrus_accession_data['connectivity'].unique().tolist()
-
-
-    # Plot scatterplots of bioactivity data respect to the year of testing
-    double_density_pchembl_year(accession_data, accession_subset, output_dir, accession, 'annotated_data')
-
-    double_density_pchembl_year(papyrus_accession_data, papyrus_accession_subset, output_dir, accession,
-                                'papyrus_data')
-
