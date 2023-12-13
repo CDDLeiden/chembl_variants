@@ -365,24 +365,9 @@ def read_common_subset(accession: str, common: bool, sim: bool, sim_thres: int,
     # Customize filename tags based on function options for subdirectories
     options_filename_tag = get_filename_tag(common, sim, sim_thres, threshold,variant_coverage)
     # Read bioactivity data for common subset precalculated
-    if not common:
-        data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
-                                               f'modelling_dataset_{ accession}_All.csv'), sep='\t')
-    else:
-        if not sim:
-            if threshold is None: # Strictly common subset
-                data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
-                                                   f'modelling_dataset_{accession}_NoThr.csv'), sep='\t')
-            else:
-                data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
-                                                   f'modelling_dataset_{accession}_Thr{threshold}_Cov'
-                                                              f'{int(variant_coverage*100)}.csv'), sep='\t')
 
-        else:
-            data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
-                                               f'modelling_dataset_{accession}_Thr{threshold}_Cov'
-                                                          f'{int(variant_coverage*100)}_Sim'
-                                                          f'{int(sim_thres*100)}.csv'), sep='\t')
+    data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
+                                             f'modelling_dataset_{accession}_{options_filename_tag}.csv'), sep='\t')
 
     return data_common
 
