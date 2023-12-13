@@ -117,15 +117,15 @@ def get_variant_similar_subset(data:pd.DataFrame, accession:str, sim_thres:int, 
                                             variant_coverage=variant_coverage)
 
     # Check if output dataset file exists
-    dataset_file = os.path.join(output_dir, options_filename_tag,
+    dataset_file = os.path.join(output_dir, options_filename_tag,'modelling_datasets',
                                 f'modelling_dataset_{accession}_{options_filename_tag}.csv')
-    coverage_file = os.path.join(output_dir, options_filename_tag,
+    coverage_file = os.path.join(output_dir, options_filename_tag,'modelling_datasets',
                                  f'modelling_dataset_coverage_{accession}_{options_filename_tag}.json')
 
     if not os.path.exists(dataset_file):
         # Check if output directory exists, else create
-        if not os.path.exists(os.path.join(output_dir, options_filename_tag)):
-            os.makedirs(os.path.join(output_dir, options_filename_tag))
+        if not os.path.exists(os.path.join(output_dir, options_filename_tag,'modelling_datasets')):
+            os.makedirs(os.path.join(output_dir, options_filename_tag,'modelling_datasets'))
 
         data_accession_agg = data[data['accession'] == accession]
 
@@ -238,15 +238,15 @@ def get_variant_common_subset(data: pd.DataFrame, accession:str, common:bool, th
                                             variant_coverage=variant_coverage)
 
     # Check if output dataset file exists
-    dataset_file = os.path.join(output_dir, options_filename_tag,
+    dataset_file = os.path.join(output_dir, options_filename_tag,'modelling_datasets',
                                 f'modelling_dataset_{accession}_{options_filename_tag}.csv')
-    coverage_file = os.path.join(output_dir, options_filename_tag,
+    coverage_file = os.path.join(output_dir, options_filename_tag,'modelling_datasets',
                                  f'modelling_dataset_coverage_{accession}_{options_filename_tag}.json')
 
     if not os.path.exists(dataset_file):
         # Check if output directory exists, else create
-        if not os.path.exists(os.path.join(output_dir, options_filename_tag)):
-            os.makedirs(os.path.join(output_dir, options_filename_tag))
+        if not os.path.exists(os.path.join(output_dir, options_filename_tag,'modelling_datasets')):
+            os.makedirs(os.path.join(output_dir, options_filename_tag,'modelling_datasets'))
 
         data_accession_agg = data[data['accession'] == accession]
 
@@ -323,7 +323,7 @@ def read_common_subset(accession: str, common: bool, sim: bool, sim_thres: int,
 
     # Read bioactivity data for common subset precalculated
     try:
-        data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
+        data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,'modelling_datasets',
                                              f'modelling_dataset_{accession}_{options_filename_tag}.csv'), sep='\t')
     except FileNotFoundError:
         raise FileNotFoundError(f'No common subset dataset found for {options_filename_tag}. '
@@ -472,7 +472,7 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
 
     # Check in output stats or dataset file if this accession was already analyzed. If so, skip analysis.
     stat_file = os.path.join(output_dir, options_filename_tag, f'stats_distribution_{options_filename_tag}.txt')
-    dataset_file = os.path.join(output_dir, options_filename_tag,
+    dataset_file = os.path.join(output_dir, options_filename_tag,'modelling_datasets',
                                 f'modelling_dataset_{accession}_{options_filename_tag}.csv')
 
     if plot and (os.path.exists(stat_file)) and (accession in pd.read_csv(stat_file, sep='\t')[
