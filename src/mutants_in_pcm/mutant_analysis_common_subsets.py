@@ -370,9 +370,14 @@ def read_common_subset(accession: str, common: bool, sim: bool, sim_thres: int,
                                                f'modelling_dataset_{ accession}_All.csv'), sep='\t')
     else:
         if not sim:
-            data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
+            if threshold is None: # Strictly common subset
+                data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
+                                                   f'modelling_dataset_{accession}_NoThr.csv'), sep='\t')
+            else:
+                data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
                                                    f'modelling_dataset_{accession}_Thr{threshold}_Cov'
                                                               f'{int(variant_coverage*100)}.csv'), sep='\t')
+
         else:
             data_common = pd.read_csv(os.path.join(output_dir, options_filename_tag,
                                                f'modelling_dataset_{accession}_Thr{threshold}_Cov'
@@ -742,58 +747,12 @@ def check_common_subset_status(chembl_version: str, papyrus_version: str, papyru
         print('Please, run main.py to compute the common subset analysis for all proteins.')
         return False
 
-def calculate_accession_common_subset_stats(common_subset_stats_df: pd.DataFrame, general_variant_stats_df:
-pd.DataFrame, aggregate: bool = True):
-    """
-    Merge statistics of the common subset with general statistics per variant and calculate statistics per accession 
-    :param common_subset_stats_df: dataframe with statistics per variant of the common subset
-    :param general_variant_stats_df: dataframe with general statistics per variant
-    :param aggregate: whether to aggregate the statistics per accession. Else return statistics per variant
-    :return: 
-    """
-    # Enrich common subset stats with variant stats from the full set
-    stats_enriched = pd.merge(common_subset_stats_df.rename(columns={'target_id':'variant'}),general_variant_stats_df,
-         how='left',on=['variant','accession'])
-
-    if aggregate:
-        def agg_functions(x):
-            d = {}
-            d['variant_count'] = int(len(list(x['variant']))) # Number of variants in the common subset
-            if 'MUTANT' in [var.split('_')[1] for var in list(x['variant'])]:
-                d['undefined_mutants'] = True
-            else:
-                d['undefined_mutants'] = False
-            d['common_subset_size'] = int(list(x['n_accession'])[0]) # Number of unique compounds in the common
-            # subset
-            d['accession_set_size'] = int(list(x['connectivity'])[0]) # Number of datapoints (not unique compounds)
-            # in the full accession set
-            d['common_subset_ratio'] = float(list(x['n_accession'])[0] / list(x['connectivity'])[0] * 100) #
-            # Percentage of datapoints in the common subset compared to the full accession set
-            d['accession_mutant_ratio'] = float(list(x['connectivity_mutant_percentage'])[0]) # Total percentage of
-            # mutant datapoints in the full accession set
-            d['l1'] = list(x['l1'])[0]
-            d['l2'] = list(x['l2'])[0]
-            d['l3'] = list(x['l3'])[0]
-            d['l4'] = list(x['l4'])[0]
-            d['Organism'] = list(x['Organism'])[0]
-            d['HGNC_symbol'] = list(x['HGNC_symbol'])[0]
-            return pd.Series(d,
-                             index=['variant_count', 'undefined_mutants', 'common_subset_size', 'accession_set_size',
-                                    'common_subset_ratio',
-                                    'accession_mutant_ratio',
-                                    'l1', 'l2', 'l3', 'l4', 'Organism', 'HGNC_symbol'])
-
-        aggregated_df = stats_enriched.groupby(['accession'], as_index=True).apply(agg_functions)
-        return aggregated_df
-    else:
-        return stats_enriched
-
 def calculate_accession_common_dataset_stats(accession: str, common: bool, sim: bool, sim_thres: int, threshold: int,
                                              variant_coverage: float, output_dir: str):
     """
-    Calculate statistics of the common subset for modelling for each accession. The difference with the function
-    calculate_accession_common_subset_stats is that this function calculates statistics for the modelling dataset
-    and focuses on the number of datapoints, while the other function focuses on the number of unique compounds.
+    Calculate statistics of the common subset for modelling for each accession. Note that this function calculates
+    statistics for the modelling dataset and focuses on the number of datapoints, while other statistics calculated
+    for the bioactivity distribution focus on the number of unique compounds.
     :param accession: Uniprot accession code
     :param common: Whether to use common subset for variants
     :param sim: Whether to include similar compounds in the definition of the common subset
@@ -838,7 +797,7 @@ def calculate_accession_common_dataset_stats(accession: str, common: bool, sim: 
 
     return subset_stats
 
-def calculate_accession_common_subset_stats_all(common: bool, sim: bool, sim_thres: int, threshold: int,
+def calculate_accession_common_dataset_stats_all(common: bool, sim: bool, sim_thres: int, threshold: int,
                                                 variant_coverage: float, output_dir: str):
     """
     Calculate statistics of the common subset for modelling for all accessions
@@ -878,6 +837,50 @@ def calculate_accession_common_subset_stats_all(common: bool, sim: bool, sim_thr
         stats_df = pd.read_csv(output_fle, sep='\t')
 
     return stats_df
+
+def enrich_accession_common_dataset_stats(common_dataset_stats_df: pd.DataFrame, general_accession_stats_df:
+pd.DataFrame):
+    """
+    Merge statistics of the common dataset with general statistics per variant and calculate statistics per accession 
+    :param common_dataset_stats_df: dataframe with statistics per variant of the common subset
+    :param general_accession_stats_df: dataframe with general statistics per variant
+    :return: enriched dataframe with statistics per accession of the modelling dataset
+    """
+    # Keep from general accession stats only the columns of interest
+    general_accession_stats_df = general_accession_stats_df[['accession', 'target_id', 'l1', 'l2', 'l3', 'l4',
+                                                             'Organism','HGNC_symbol', 'connectivity',
+                                                             'connectivity_mutant_percentage']]
+    general_accession_stats_df.rename(columns={'target_id':'full_set_variant_n',
+                                               'connectivity': 'full_set_size',
+                                               'connectivity_mutant_percentage': 'full_set_mutant_percentage'},
+                                      inplace=True)
+
+    # Enrich common subset stats with variant stats from the full set
+    stats_enriched = pd.merge(common_dataset_stats_df, general_accession_stats_df,
+                              how='left',on=['accession'])
+
+    # Calculate the ratio of datapoints in the common subset compared to the full set
+    stats_enriched['common_subset_percentage'] = stats_enriched['dataset_size'] / stats_enriched['full_set_size'] *100
+
+    # Calculate the ratio of variants in the common subset compared to the full set
+    stats_enriched['common_subset_variant_percentage'] = stats_enriched['variant_n'] / stats_enriched[
+        'full_set_variant_n'] *100
+
+    # Make sure the type of columns in the dataframe is correct
+    stats_enriched['variant_n'] = stats_enriched['variant_n'].astype(int)
+    stats_enriched['dataset_size'] = stats_enriched['dataset_size'].astype(int)
+    stats_enriched['full_matrix_size'] = stats_enriched['full_matrix_size'].astype(int)
+    stats_enriched['unique_compounds'] = stats_enriched['unique_compounds'].astype(int)
+    stats_enriched['full_set_variant_n'] = stats_enriched['full_set_variant_n'].astype(int)
+    stats_enriched['full_set_size'] = stats_enriched['full_set_size'].astype(int)
+    stats_enriched['common_subset_percentage'] = stats_enriched['common_subset_percentage'].astype(float)
+    stats_enriched['common_subset_variant_percentage'] = stats_enriched['common_subset_variant_percentage'].astype(float)
+    stats_enriched['mutant_ratio'] = stats_enriched['mutant_ratio'].astype(float)
+    stats_enriched['variant_coverage'] = stats_enriched['variant_coverage'].astype(str)
+    stats_enriched['sparsity'] = stats_enriched['sparsity'].astype(float)
+    stats_enriched['balance_score'] = stats_enriched['balance_score'].astype(float)
+
+    return stats_enriched
 
 def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: int, threshold: int, variant_coverage: float,
                              min_subset_n: int = 50, thres_error_mean: float = 0.5, error_mean_limit: str = 'min'):
@@ -973,7 +976,7 @@ def read_bioactivity_distribution_stats(stats_dir: str, subset_type: str, access
             df['subset_tag'] = subset_tag
             df_list.append(df)
     elif subset_type == 'common_subsets':
-        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/*.txt')]
+        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/stats_file*.txt')]
         for dir in dirs:
             df = pd.read_csv(dir, sep='\t')
             subset_tag = '_'.join(os.path.basename(dir).replace('.txt','').split('_')[2:])
