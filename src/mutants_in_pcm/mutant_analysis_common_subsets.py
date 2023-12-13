@@ -27,50 +27,6 @@ from .preprocessing import merge_chembl_papyrus_mutants
 from .mutant_analysis_accession import count_proteins_in_dataset
 from .data_path import get_data_path
 
-
-def compute_stats_per_accession(data: pd.DataFrame):
-    """
-    Compute statistics on mutant and bioactivity data counts for each target (accession)
-    :param data: pd.DataFrame with annotated mutants, including at least the following columns:
-                ['CID', 'target_id', 'accession', 'pchembl_value_Mean', 'source']
-    :return: DataFrame with statistics
-    """
-    # Calculate stats per variant (target_id)
-    def agg_functions_target_id(x):
-        d = {}
-        d['connectivity_count'] = len(list(x['connectivity']))
-        d['pchembl_value_Mean_Mean'] = x['pchembl_value_Mean'].mean()
-        d['pchembl_value_Mean_StD'] = x['pchembl_value_Mean'].std()
-        d['Activity_class_consensus'] = pd.Series.mode(x['Activity_class_consensus']) # Check if this does what it's
-        # supposed
-        d['source'] = list(set(list(x['source'])))
-        return pd.Series(d, index=['connectivity_count', 'pchembl_value_Mean_Mean', 'pchembl_value_Mean_StD',
-                                   'Activity_class_consensus', 'source'])
-
-    stats_target_id = data.groupby(['accession', 'target_id'], as_index=False).apply(agg_functions_target_id)
-
-    # Calculate stats per target (accession)
-    def agg_functions_accession(x):
-        d = {}
-        d['n_variants'] = len(list(x['target_id']))
-        d['target_id'] = list(x['target_id'])
-        d['connectivity_count'] = list(x['connectivity_count'])
-        d['connectivity_count_sum'] = x['connectivity_count'].sum()
-        d['pchembl_value_Mean_Mean'] = list(x['pchembl_value_Mean_Mean'])
-        d['pchembl_value_Mean_StD'] = list(x['pchembl_value_Mean_StD'])
-        d['Activity_class_consensus'] = list(x['Activity_class_consensus'])
-        d['source'] = list(set([j for i in x['source'] for j in i]))
-        return pd.Series(d, index=['n_variants','target_id','connectivity_count','connectivity_count_sum','pchembl_value_Mean_Mean',
-                                   'pchembl_value_Mean_StD','Activity_class_consensus','source'])
-
-    stats_accession = stats_target_id.groupby(['accession'], as_index=False).apply(agg_functions_accession)
-
-    # Sort stats
-    stats_accession.sort_values(by='n_variants', ascending=False, inplace=True)
-    # stats_accession.sort_values(by='connectivity_count_sum', ascending=False, inplace=True)
-
-    return stats_accession
-
 def compute_pairwise_similarity(data: pd.DataFrame):
     """
     Compute pairwise Tanimoto similarity between unique compounds in a dataset and write to an output file
