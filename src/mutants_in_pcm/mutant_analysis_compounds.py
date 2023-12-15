@@ -496,7 +496,7 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
             os.mkdir(os.path.join(output_dir, accession, dataset_alias))
 
         common_data, coverage_dict = get_variant_common_subset(accession_data, accession, True, min_threshold,
-                                                               None, False, os.path.join(output_dir, accession, dataset_alias))
+                                                               None, False, os.path.join(output_dir, accession))
     else:
         dataset_alias = 'full_set'
 

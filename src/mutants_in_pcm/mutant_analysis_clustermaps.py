@@ -11,8 +11,6 @@ from matplotlib import colors
 from math import floor
 from matplotlib.cm import ScalarMappable
 
-from .mutant_analysis_accession import filter_accession_data
-from .mutant_analysis_common_subsets import read_common_subset
 from .mutant_analysis_protein import calculate_average_residue_distance_to_ligand
 from .mutant_analysis_type import extract_residue_number_list
 

@@ -204,6 +204,8 @@ def get_variant_similar_subset(data:pd.DataFrame, accession:str, sim_thres:int, 
 
         # Write dataset and coverage to file
         if save_dataset:
+            # First remove NAs
+            common_subset_melt = common_subset_melt[common_subset_melt['pchembl_value_Mean'].notna()]
             common_subset_melt.to_csv(dataset_file, sep='\t', index=False)
             with open(coverage_file, 'w') as file:
                 json.dump(coverage_dict, file)
@@ -244,10 +246,6 @@ def get_variant_common_subset(data: pd.DataFrame, accession:str, common:bool, th
                                  f'modelling_dataset_coverage_{accession}_{options_filename_tag}.json')
 
     if not os.path.exists(dataset_file):
-        # Check if output directory exists, else create
-        if not os.path.exists(os.path.join(output_dir, options_filename_tag,'modelling_datasets')):
-            os.makedirs(os.path.join(output_dir, options_filename_tag,'modelling_datasets'))
-
         data_accession_agg = data[data['accession'] == accession]
 
         data_pivoted = pd.pivot(data_accession_agg,index='target_id',columns='connectivity',values='pchembl_value_Mean')
@@ -290,6 +288,10 @@ def get_variant_common_subset(data: pd.DataFrame, accession:str, common:bool, th
             common_subset_melt = data_accession_agg.copy(deep=True)
 
         if save_dataset:
+            # Check if output directory exists, else create
+            if not os.path.exists(os.path.join(output_dir, options_filename_tag, 'modelling_datasets')):
+                os.makedirs(os.path.join(output_dir, options_filename_tag, 'modelling_datasets'))
+
             common_subset_melt.to_csv(dataset_file, sep='\t', index=False)
             with open(coverage_file, 'w') as file:
                 json.dump(coverage_dict, file)
@@ -593,7 +595,7 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                              'std_error_strict':std_error_strict_list,
                              'n_compounds_accession':n_accession_list,
                              'n_compounds_target_id':n_target_id_list,
-                             'coverage':coverage_list}
+                             'compound_variant_coverage':coverage_list}
 
                 stat_df = pd.DataFrame(stat_dict)
 
@@ -609,6 +611,8 @@ def compute_variant_activity_distribution(data: pd.DataFrame, accession: str, co
                 print(f'Skipping accession {accession}: not enough data for plotting.')
                 if not os.path.exists(os.path.join(output_dir, options_filename_tag,
                                                    f'skipped_accession_{options_filename_tag}.txt')):
+                    if not os.path.exists(os.path.join(output_dir, options_filename_tag)):
+                        os.makedirs(os.path.join(output_dir, options_filename_tag))
                     with open(os.path.join(output_dir, options_filename_tag,
                                            f'skipped_accession_{options_filename_tag}.txt'),'w') as file:
                         file.write(f'Skipping accession {accession}\n')
@@ -636,11 +640,11 @@ def read_bioactivity_distribution_stats_file(file_dir: str, common: bool, sim: b
     :return: pd.DataFrame with the stats
     """
     filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
-    if not os.path.exists(os.path.join(file_dir, filename_tag, f'stats_distribution_variant_{filename_tag}.txt')):
+    if not os.path.exists(os.path.join(file_dir, filename_tag, f'stats_distribution_{filename_tag}.txt')):
         raise FileNotFoundError(f'No stats file found for {filename_tag}. '
                                 f'Please run main.py first.')
     else:
-        stat_df = pd.read_csv(os.path.join(file_dir, filename_tag, f'stats_distribution_variant_{filename_tag}.txt'), sep='\t')
+        stat_df = pd.read_csv(os.path.join(file_dir, filename_tag, f'stats_distribution_{filename_tag}.txt'), sep='\t')
         stat_df.drop_duplicates(['accession', 'target_id'], inplace=True)
 
         return stat_df
@@ -737,12 +741,12 @@ def calculate_accession_common_dataset_stats(accession: str, common: bool, sim: 
     else:
         subset_stats['undefined_mutants'] = False
 
-    subset_stats['variant_n'] = variant_n
-    subset_stats['dataset_size'] = dataset_size
+    subset_stats['n_variants'] = variant_n
+    subset_stats['n_data'] = dataset_size
     subset_stats['full_matrix_size'] = full_matrix_size
-    subset_stats['unique_compounds'] = unique_compounds
-    subset_stats['mutant_ratio'] = 1 - (wt_dataset_size / dataset_size)
-    subset_stats['variant_coverage'] = variant_coverage
+    subset_stats['n_compounds'] = unique_compounds
+    subset_stats['data_mutant_ratio'] = 1 - (wt_dataset_size / dataset_size)
+    subset_stats['data_variant_coverage'] = variant_coverage
     subset_stats['sparsity'] = 1 - (dataset_size / full_matrix_size)
     subset_stats['balance_score'] = statistics.mean(list(variant_coverage.values()))
 
@@ -799,12 +803,12 @@ pd.DataFrame):
     :return: enriched dataframe with statistics per accession of the modelling dataset
     """
     # Keep from general accession stats only the columns of interest
-    general_accession_stats_df = general_accession_stats_df[['accession', 'target_id', 'l1', 'l2', 'l3', 'l4',
-                                                             'Organism','HGNC_symbol', 'connectivity',
-                                                             'connectivity_mutant_percentage']]
-    general_accession_stats_df.rename(columns={'target_id':'full_set_variant_n',
-                                               'connectivity': 'full_set_size',
-                                               'connectivity_mutant_percentage': 'full_set_mutant_percentage'},
+    general_accession_stats_df = general_accession_stats_df[['accession', 'n_variants', 'l1', 'l2', 'l3', 'l4',
+                                                             'Organism','HGNC_symbol', 'n_data',
+                                                             'data_mutant_percentage']]
+    general_accession_stats_df.rename(columns={'n_variants':'n_variants_full',
+                                               'n_data': 'n_data_full',
+                                               'data_mutant_percentage': 'data_mutant_percentage_full'},
                                       inplace=True)
 
     # Enrich common subset stats with variant stats from the full set
@@ -812,23 +816,24 @@ pd.DataFrame):
                               how='left',on=['accession'])
 
     # Calculate the ratio of datapoints in the common subset compared to the full set
-    stats_enriched['common_subset_percentage'] = stats_enriched['dataset_size'] / stats_enriched['full_set_size'] *100
+    stats_enriched['common_subset_data_percentage'] = stats_enriched['n_data'] / stats_enriched['n_data_full'] *100
 
     # Calculate the ratio of variants in the common subset compared to the full set
-    stats_enriched['common_subset_variant_percentage'] = stats_enriched['variant_n'] / stats_enriched[
-        'full_set_variant_n'] *100
+    stats_enriched['common_subset_variant_percentage'] = stats_enriched['n_variants'] / stats_enriched[
+        'n_variants_full'] *100
 
     # Make sure the type of columns in the dataframe is correct
-    stats_enriched['variant_n'] = stats_enriched['variant_n'].astype(int)
-    stats_enriched['dataset_size'] = stats_enriched['dataset_size'].astype(int)
+    stats_enriched['n_variants'] = stats_enriched['n_variants'].astype(int)
+    stats_enriched['n_data'] = stats_enriched['n_data'].astype(int)
     stats_enriched['full_matrix_size'] = stats_enriched['full_matrix_size'].astype(int)
-    stats_enriched['unique_compounds'] = stats_enriched['unique_compounds'].astype(int)
-    stats_enriched['full_set_variant_n'] = stats_enriched['full_set_variant_n'].astype(int)
-    stats_enriched['full_set_size'] = stats_enriched['full_set_size'].astype(int)
-    stats_enriched['common_subset_percentage'] = stats_enriched['common_subset_percentage'].astype(float)
+    stats_enriched['n_compounds'] = stats_enriched['n_compounds'].astype(int)
+    stats_enriched['n_variants_full'] = stats_enriched['n_variants_full'].astype(int)
+    stats_enriched['n_data_full'] = stats_enriched['n_data_full'].astype(int)
+    stats_enriched['data_mutant_ratio'] = stats_enriched['data_mutant_ratio'].astype(float)
+    stats_enriched['data_mutant_percentage_full'] = stats_enriched['data_mutant_percentage_full'].astype(float)
+    stats_enriched['common_subset_data_percentage'] = stats_enriched['common_subset_data_percentage'].astype(float)
     stats_enriched['common_subset_variant_percentage'] = stats_enriched['common_subset_variant_percentage'].astype(float)
-    stats_enriched['mutant_ratio'] = stats_enriched['mutant_ratio'].astype(float)
-    stats_enriched['variant_coverage'] = stats_enriched['variant_coverage'].astype(str)
+    stats_enriched['data_variant_coverage'] = stats_enriched['data_variant_coverage'].astype(str)
     stats_enriched['sparsity'] = stats_enriched['sparsity'].astype(float)
     stats_enriched['balance_score'] = stats_enriched['balance_score'].astype(float)
 
@@ -861,7 +866,7 @@ def extract_relevant_targets(file_dir: str, common: bool, sim: bool, sim_thres: 
     """
     filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
     stat_df =  pd.read_csv(os.path.join(file_dir, filename_tag,
-                                        f'stats_distribution_variant_{filename_tag}.txt'),
+                                        f'stats_distribution_{filename_tag}.txt'),
                            sep='\t')
     stat_df.drop_duplicates(['accession','target_id'], inplace=True)
 
@@ -919,21 +924,21 @@ def read_multiple_bioactivity_distribution_stats(stats_dir: str, subset_type: st
     # Read stats for all possible subtypes
     df_list = []
     if subset_type == 'butina_clusters_dual':
-        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/full_dual_tested_set/*/*/*.txt')]
+        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/full_dual_tested_set/*/*/stats_distribution*.txt')]
         for dir in dirs:
             df = pd.read_csv(dir, sep='\t')
             subset_tag = dir.split(sep='\\')[-3]
             df['subset_tag'] = subset_tag
             df_list.append(df)
     elif subset_type == 'butina_clusters_full':
-        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/full_set/*/*/*.txt')]
+        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/full_set/*/*/stats_distribution*.txt')]
         for dir in dirs:
             df = pd.read_csv(dir, sep='\t')
             subset_tag = dir.split(sep='\\')[-3]
             df['subset_tag'] = subset_tag
             df_list.append(df)
     elif subset_type == 'common_subsets':
-        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/stats_distribution_variant*.txt')]
+        dirs = [dir for dir in glob.glob(f'{stats_dir}/*/stats_distribution*.txt')]
         for dir in dirs:
             df = pd.read_csv(dir, sep='\t')
             subset_tag = '_'.join(os.path.basename(dir).replace('.txt','').split('_')[2:])
@@ -982,7 +987,7 @@ def scale_bioactivity_distibution_stats(df: pd.DataFrame):
         print('mean error strict not calculated')
 
     # Multiply coverage to get a bubble size that is visible
-    df['coverage_upscaled'] = df['coverage']*1000
+    df['coverage_upscaled'] = df['compound_variant_coverage']*1000
 
     return df
 
@@ -1044,7 +1049,7 @@ def plot_bubble_bioactivity_distribution_stats(stats_dir: str, subset_type: str,
     :param output_dir: Directory to save the plot
     """
     # Read stats
-    df_accession = read_bioactivity_distribution_stats_file(stats_dir, subset_type, accession)
+    df_accession = read_multiple_bioactivity_distribution_stats(stats_dir, subset_type, accession)
     # Scale stats for bubble plotting
     df_accession = scale_bioactivity_distibution_stats(df_accession)
     # Prepare dataframe for bubble plotting
