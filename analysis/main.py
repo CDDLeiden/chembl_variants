@@ -80,8 +80,9 @@ stats_variant = get_statistics_across_variants(chembl_version, papyrus_version, 
                                                annotation_round, accession_analysis_dir,save=True)
 print('Done.')
 
-# Compute bioactivity distributions for common subsets for all proteins
-from mutants_in_pcm.mutant_analysis_common_subsets import compute_variant_activity_distribution, extract_relevant_targets
+# Compute bioactivity distributions for common subsets for all proteins and all statistics
+from mutants_in_pcm.mutant_analysis_common_subsets import (compute_variant_activity_distribution, calculate_accession_common_dataset_stats_all,
+                                                           extract_relevant_targets)
 print('Computing bioactivity distributions for common subsets...')
 for accession in stats_protein['accession'].tolist():
     # Full dataset
@@ -105,6 +106,23 @@ for accession in stats_protein['accession'].tolist():
                                           color_palette=None, save_dataset=True,
                                           output_dir=common_analysis_dir)
 print('Done.')
+print('Computing common subset dataset statistics...')
+# Full dataset
+calculate_accession_common_dataset_stats_all(common=False, sim=False, sim_thres=None,
+                                             threshold=None, variant_coverage=None,
+                                             output_dir=common_analysis_dir)
+# Strict common subset with > 20% coverage
+calculate_accession_common_dataset_stats_all(common=True, sim=False, sim_thres=None,
+                                             threshold=2, variant_coverage=0.2,
+                                             output_dir=common_analysis_dir)
+# Common subset with > 20% coverage including similar compounds (>80% Tanimoto) tested in other variants
+calculate_accession_common_dataset_stats_all(common=True, sim=True, sim_thres=0.8,
+                                             threshold=2, variant_coverage=0.2,
+                                             output_dir=common_analysis_dir)
+# Strictly common subset (threshold=None)
+calculate_accession_common_dataset_stats_all( common=True, sim=False, sim_thres=None,
+                                              threshold=None, variant_coverage=None,
+                                             output_dir=common_analysis_dir)
 
 # Compute bioactivity distributions for compound clusters for proteins with the biggest common subsets
 from mutants_in_pcm.mutant_analysis_compounds import plot_bioactivity_distribution_cluster_subset
