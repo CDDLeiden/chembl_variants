@@ -448,7 +448,11 @@ def get_clustering_stats(accession: str, output_dir: str, subset_alias:str, cuto
     :param output_dir: path to output directory
     :param cutoff: distance cutoff to the cluster central molecule for molecule inclusion in cluster
     """
-    with open(os.path.join(output_dir, accession, subset_alias, f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.json')) as in_file:
+    if subset_alias == 'strictly_common_subset': # Clustermap analysis
+        path_to_file = os.path.join(output_dir, accession)
+    elif subset_alias in ['full_set', 'full_dual_tested_set']: # Bubbleplot analysis
+        path_to_file = os.path.join(output_dir, accession, subset_alias)
+    with open(os.path.join(path_to_file, f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.json')) as in_file:
         connectivity_cluster_dict = json.load(in_file)
 
     # Get cluster sizes
