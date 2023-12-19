@@ -21,7 +21,11 @@ def compute_variant_wasserstein_distance(accession: str, common: bool, sim: bool
     """
     # Customize filename tags based on function options for subdirectories
     options_filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
-    output_file = os.path.join(output_dir, options_filename_tag, f'wasserstein_distances_{accession}.json')
+    output_file = os.path.join(output_dir, options_filename_tag, 'wasserstein_distances',
+                               f'wasserstein_distances_{accession}_{options_filename_tag}.json')
+
+    if not os.path.exists(os.path.dirname(output_file)):
+        os.makedirs(os.path.dirname(output_file))
 
     if not os.path.isfile(output_file):
         # Read common subset
@@ -78,20 +82,23 @@ def compute_subset_wasserstein_distance(accession: str, subset_1_dict: dict,
     if options_filename_tag_1 > options_filename_tag_2:
         options_filename_tag_1, options_filename_tag_2 = options_filename_tag_2, options_filename_tag_1
 
-    output_file = os.path.join(output_dir,f'wasserstein_distances_{options_filename_tag_1}_'
+    output_file = os.path.join(output_dir,'wasserstein_distances',f'wasserstein_distances_{options_filename_tag_1}_'
                                           f'vs_{options_filename_tag_2}_{accession}.json')
+
+    if not os.path.exists(os.path.dirname(output_file)):
+        os.makedirs(os.path.dirname(output_file))
 
     if not os.path.isfile(output_file):
         # Read common subset
         common_subset_1 = read_common_subset(accession, **subset_1_dict, output_dir=output_dir)
         common_subset_2 = read_common_subset(accession, **subset_2_dict, output_dir=output_dir)
 
-        dataset_size_difference = abs(len(common_subset_1) - len(common_subset_2))
+        n_data_difference = abs(len(common_subset_1) - len(common_subset_2))
 
         # Initialize dictionary for Wasserstein distances
         w_distances = {}
 
-        variant_n_difference = []
+        n_variants_difference = []
 
         # Compute Wasserstein distance for each variant
         for variant in common_subset_1['target_id'].unique():
@@ -106,7 +113,7 @@ def compute_subset_wasserstein_distance(accession: str, subset_1_dict: dict,
             # Compute Wasserstein distance
             if len(var_bioactivity_1) == 0 or len(var_bioactivity_2) == 0:
                 print(f'{accession} variant {variant} is not in both sets.')
-                variant_n_difference.append(variant)
+                n_variants_difference.append(variant)
             else:
                 w_distances[variant] = wasserstein_distance(var_bioactivity_1, var_bioactivity_2)
 
@@ -114,7 +121,7 @@ def compute_subset_wasserstein_distance(accession: str, subset_1_dict: dict,
         subset_1_stats = calculate_accession_common_dataset_stats(accession, **subset_1_dict, output_dir=output_dir)
         subset_2_stats = calculate_accession_common_dataset_stats(accession, **subset_2_dict, output_dir=output_dir)
         # Add additional statistics to dictionary
-        stats_to_add = ['variant_n','dataset_size','unique_compounds','mutant_ratio','sparsity','balance_score']
+        stats_to_add = ['n_variants','n_data','n_compounds','data_mutant_ratio','sparsity','balance_score']
         for key, value in subset_1_stats.items():
             if key in stats_to_add:
                 w_distances[f'{key}_set1'] = value
@@ -152,7 +159,8 @@ def aggregate_variant_wasserstein_distances(common: bool, sim: bool, sim_thres: 
     # Customize filename tags based on function options for subdirectories
     options_filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
 
-    output_file = os.path.join(output_dir, options_filename_tag, f'wasserstein_distances_all.json')
+    output_file = os.path.join(output_dir, options_filename_tag,
+                               f'wasserstein_distances_{options_filename_tag}_all.json')
 
     if not os.path.isfile(output_file):
         # Initialize dictionary for Wasserstein distances
@@ -245,11 +253,11 @@ def calculate_wasserstein_variant_average(w_distances: dict):
 
     # Compute average distance
     for variant, distance in w_distances.items():
-        if ('WT' not in variant) and (variant not in ['variant_n_set1','dataset_size_set1',
-                                                      'unique_compounds_set1','mutant_ratio_set1',
-                                                      'sparsity_set1','balance_score_set1','variant_n_set2',
-                                                      'dataset_size_set2','unique_compounds_set2',
-                                                      'mutant_ratio_set2','sparsity_set2',
+        if ('WT' not in variant) and (variant not in ['n_variants_set1','n_data_set1',
+                                                      'n_compounds_set1','data_mutant_ratio_set1',
+                                                      'sparsity_set1','balance_score_set1','n_variants_set2',
+                                                      'n_data_set2','n_compounds_set2',
+                                                      'data_mutant_ratio_set2','sparsity_set2',
                                                       'balance_score_set2']):
             distances.append(distance)
     try:
@@ -269,7 +277,8 @@ def wasserstein_distance_statistics(common: bool, sim: bool, sim_thres: int,
     # Customize filename tags based on function options for subdirectories
     options_filename_tag = get_filename_tag(common, sim, sim_thres, threshold, variant_coverage)
 
-    output_file = os.path.join(output_dir, options_filename_tag, f'wasserstein_distances_all.csv')
+    output_file = os.path.join(output_dir, options_filename_tag,
+                               f'wasserstein_distances_{options_filename_tag}_all.csv')
 
     # Read or compute all wasserstein distances for all proteins
     w_distances_all = aggregate_variant_wasserstein_distances(common, sim, sim_thres, threshold,
@@ -329,10 +338,10 @@ def wasserstein_distance_dual_statistics(subset_1_dict: dict,
                 w_distances_stats[accession]['WT'] = None
             w_distances_stats[accession]['mutants_avg'] = calculate_wasserstein_variant_average(w_distances)
             # Report the rest of the statistics
-            order_keys = ['variant_n_set1','variant_n_set2',
-                           'dataset_size_set1','dataset_size_set2',
-                            'unique_compounds_set1','unique_compounds_set2',
-                           'mutant_ratio_set1','mutant_ratio_set2',
+            order_keys = ['n_variants_set1','n_variants_set2',
+                           'n_data_set1','n_data_set2',
+                            'n_compounds_set1','n_compounds_set2',
+                           'data_mutant_ratio_set1','data_mutant_ratio_set2',
                            'sparsity_set1','sparsity_set2',
                            'balance_score_set1','balance_score_set2']
             for key in order_keys:
@@ -340,7 +349,7 @@ def wasserstein_distance_dual_statistics(subset_1_dict: dict,
 
         # Make dataframe from dictionary
         w_distances_stats_df = pd.DataFrame.from_dict(w_distances_stats, orient='index').sort_values(
-            by='dataset_size_set2', ascending=False)
+            by='n_data_set2', ascending=False)
         print(w_distances_stats_df)
 
         # Save dataframe
