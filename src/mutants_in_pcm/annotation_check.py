@@ -169,10 +169,10 @@ def check_manual_positive_annotations(chembl_version: str, annotation_round: int
     :param chembl_version: ChEMBL version
     :param annotation_round: annotation round
     """
-    manual_positive_assays = read_assay_annotations(chembl_version, annotation_round)
+    manual_positive_assays = read_manual_positive_annotations(chembl_version, annotation_round)
 
     # If file exists, read it and check that it has a column with manual annotations
-    if manual_positive_assays:
+    if isinstance(manual_positive_assays,pd.DataFrame):
         print('Checking manual annotation format...')
         if 'reason' not in manual_positive_assays.columns:
             raise ValueError('Must contain a column "reason" with manual annotations')
