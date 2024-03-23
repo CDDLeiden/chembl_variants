@@ -12,7 +12,7 @@ from math import floor
 from matplotlib.cm import ScalarMappable
 
 from .mutant_analysis_protein import calculate_average_residue_distance_to_ligand
-from .mutant_analysis_type import extract_residue_number_list
+from .mutant_analysis_type import extract_residue_number_list,unique_single_mutations
 
 """Mutant statistics analysis. Part X"""
 """Analyzing bioactivity values for (strictly) common subsets per accession using clustermaps"""
@@ -139,8 +139,8 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
     id, requires 'connectivity_cluster_dict' and 'butina_cutoff' in kwargs), and 'year' (Year of first testing of the
     compound-accession
     date, requires 'connectivity_year_dict' in kwargs)
-    :param variant_annotation: proeprty to annotate the variants on. Options are 'ligand_distance' (Distance from
-    mutated residue to ligand COG in available crystal structures, requires 'dist_dir' in kwargs),
+    :param variant_annotation: property to annotate the variants on. Options are 'ligand_distance' (Distance from
+    mutated residue to ligand centroid in available crystal structures, requires 'dist_dir' in kwargs),
     and 'aa_change_epstein' (Epstein aa distance coefficient, requires 'epstein_dict' in kwargs)
     :param output_dir: path to output
     :param kwargs: dictionary of additional keyword arguments
@@ -220,10 +220,17 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
 
     if variant_annotation == 'ligand_distance':
         dist_dir = kwargs['dist_dir']
+        try:
+            multiple_mutants = kwargs['multiple_mutants'] # what to do with multiple mutants
+        except KeyError:
+            print('kwarg "multiple_mutants" to handle multiple mutants is not specified. Using mean distance.')
+            multiple_mutants = 'mean'
 
         # Calculate distance to ligand from mutated residues
         target_id_list = pivoted_data.index.tolist()
-        mutants_resn = extract_residue_number_list(target_id_list)
+        # mutants_resn = extract_residue_number_list(target_id_list)
+        unique_mutations = unique_single_mutations(pivoted_data.reset_index(), accession)
+        mutants_resn = [int(mutation[1:-1]) for mutation in unique_mutations if mutation != 'WT' and mutation != 'MUTANT']
 
         distances_dict = calculate_average_residue_distance_to_ligand(accession=accession,
                                                                       resn=mutants_resn,
@@ -232,14 +239,29 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                                                                       output_dir=dist_dir)
         # Map distances to mutants
         mutants_dist = []
-        for res in mutants_resn:
-            if (res == 'WT') or (res == 'MUTANT'):
+        mutants_resn_list = extract_residue_number_list(target_id_list)
+
+        for target_res in mutants_resn_list:
+            if (target_res == 'WT') or (target_res == 'MUTANT'):
                 mutants_dist.append(0)
             else:
-                try:
-                    mutants_dist.append(distances_dict[str(res)])
-                except KeyError:
+                target_dist = []
+                for res in target_res:
+                    try:
+                        target_dist.append(distances_dict[str(res)])
+                    except KeyError:
+                        pass
+                if len(target_dist) == 0:
                     mutants_dist.append(0)
+                elif len(target_dist) == 1:
+                    mutants_dist.append(target_dist[0])
+                else:
+                    if multiple_mutants == 'mean':
+                        mutants_dist.append(np.mean(target_dist))
+                    elif multiple_mutants == 'min':
+                        mutants_dist.append(min(target_dist))
+                    elif multiple_mutants == 'max':
+                        mutants_dist.append(max(target_dist))
 
         # Create color map based on distances
         COLORS = sns.light_palette("darkred", reverse=True, as_cmap=False)
@@ -264,7 +286,11 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                        linewidth=0.1, linecolor='w', cbar_kws={'label': 'pChEMBL value (Mean)'},
                        row_colors=COLORS)
         # save figure
-        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_distance_groups.svg'))
+        multiple_tag = ''
+        if multiple_mutants is not None:
+            multiple_tag = f'_multiple_{multiple_mutants}'
+
+        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_distance{multiple_tag}_groups.svg'))
 
         # Create the colorbar
         pl.figure(figsize=(4, 0.5))
@@ -280,10 +306,10 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
         cb.outline.set_visible(False)
 
         # Set legend label and move it to the top (instead of default bottom)
-        cb.set_label("Average distance of mutated residue\nCOG to ligand COG ($\\AA$)", size=10, labelpad=10)
+        cb.set_label("Average distance of substituted residue\ncentroid to ligand centroid ($\\AA$)", size=10, labelpad=10)
 
         # save figure
-        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_distance_groups_legend.svg'))
+        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_distance{multiple_tag}_groups_legend.svg'))
 
     elif variant_annotation == 'aa_change_epstein':
         epstein_dict = kwargs['epstein_dict']
