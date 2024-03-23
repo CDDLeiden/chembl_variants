@@ -152,6 +152,8 @@ def plot_circular_barplot_families(annotated_data_families: pd.DataFrame, family
 
     # Calculate ratio of mutated datapoints respect to all datapoints
     summary_all['mut_ratio'] = summary_all['activity_mut']/summary_all['activity_all']
+    # use percentage instead of ratio
+    summary_all['mut_ratio'] = summary_all['mut_ratio'].fillna(value=0) * 100
     if save:
         summary_all.to_csv(os.path.join(output_dir, f'family_stats_{family_level}{file_tag}.csv'), sep='\t')
     print(summary_all)
@@ -263,7 +265,10 @@ def plot_circular_barplot_families(annotated_data_families: pd.DataFrame, family
     # ticks of the x axis.
     XTICKS = ax.xaxis.get_major_ticks()
     for tick in XTICKS:
-        tick.set_pad(10)
+        if figure_panel:
+            tick.set_pad(25)
+        else:
+            tick.set_pad(10)
 
     # Add custom annotations -----------------------------------------
     # The following represent the heights in the values of the y axis
@@ -274,9 +279,15 @@ def plot_circular_barplot_families(annotated_data_families: pd.DataFrame, family
 
     # Add text to explain the meaning of the height of the bar and the
     # height of the dot
-    ax.text(ANGLES[0]-0.042, max_value, "Total bioactivity\npoints (Log scale)", rotation=21,
+    if figure_panel:
+        bioactivity_text = 'bioact.'
+        label_height = max_value * 10
+    else:
+        bioactivity_text = 'bioactivity points'
+        label_height = max_value * 2
+    ax.text(ANGLES[0]-0.042, label_height, f"Total bioactivity\npoints (Log scale)", rotation=21,
             ha="center", va="top", size=small_label_size, zorder=12)
-    ax.text(ANGLES[0]+ 0.012, (10**(max_log_exp-2)), "Mutant bioactivity points\n(Log scale)", rotation=-69,
+    ax.text(ANGLES[0]+ 0.012, (10**(max_log_exp-2)), f"Variant {bioactivity_text}\n(Log scale)", rotation=-69,
             ha="center", va="center", size=small_label_size, zorder=12)
 
     # Add legend -----------------------------------------------------
@@ -309,8 +320,19 @@ def plot_circular_barplot_families(annotated_data_families: pd.DataFrame, family
     # Remove tick marks
     cb.ax.xaxis.set_tick_params(size=0, labelsize=medium_label_size)
 
+    # Make sure the colorbar ticks are integers
+    cbar_size = max(RATIO)
+    if cbar_size < 8:
+        cb.ax.xaxis.set_major_locator(plt.MultipleLocator(1))
+    if cbar_size < 15:
+        cb.ax.xaxis.set_major_locator(plt.MultipleLocator(2))
+    elif cbar_size < 50:
+        cb.ax.xaxis.set_major_locator(plt.MultipleLocator(5))
+    elif cbar_size < 100:
+        cb.ax.xaxis.set_major_locator(plt.MultipleLocator(20))
+
     # Set legend label and move it to the top (instead of default bottom)
-    cb.set_label("Mutant ratio", size=label_size, labelpad=label_pad)
+    cb.set_label("Variant bioactivity %", size=label_size, labelpad=label_pad)
 
     # Add annotations ------------------------------------------------
 
@@ -330,6 +352,8 @@ def plot_circular_barplot_families(annotated_data_families: pd.DataFrame, family
     fig.text(0.1, 0.93, title, fontsize=25, weight="bold", ha="left", va="baseline")
     fig.text(0.1, 0.9, subtitle, fontsize=14, ha="left", va="top")
     # fig.text(0.5, 0.025, caption, fontsize=10, ha="center", va="baseline")
+
+    plt.tight_layout()
 
     if save:
         # Save figure
@@ -395,7 +419,8 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
 
     # Calculate ratio of mutated datapoints respect to all datapoints
     summary_all['mut_ratio'] = summary_all['mut_new']/summary_all['mut_all']
-    summary_all['mut_ratio'] = summary_all['mut_ratio'].fillna(value=0)
+    # use percentage instead of ratio
+    summary_all['mut_ratio'] = summary_all['mut_ratio'].fillna(value=0)  *100
     if save:
         summary_all.to_csv(os.path.join(output_dir, f'family_stats_ChEMBLNewAnnotations_{family_level}{file_tag}.csv'), sep='\t')
     print(summary_all)
@@ -507,7 +532,10 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
     # ticks of the x axis.
     XTICKS = ax.xaxis.get_major_ticks()
     for tick in XTICKS:
-        tick.set_pad(10)
+        if figure_panel:
+            tick.set_pad(25)
+        else:
+            tick.set_pad(10)
 
     # Add custom annotations -----------------------------------------
     # The following represent the heights in the values of the y axis
@@ -518,9 +546,15 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
 
     # Add text to explain the meaning of the height of the bar and the
     # height of the dot
-    ax.text(ANGLES[0]-0.042, max_value, "Total mutant bioactivity\npoints (Log scale)", rotation=21,
+    if figure_panel:
+        bioactivity_text = 'bioact.'
+        label_height = max_value*10
+    else:
+        bioactivity_text = 'bioactivity points'
+        label_height = max_value*2
+    ax.text(ANGLES[0]-0.042, label_height, "Total variant bioactivity\npoints (Log scale)", rotation=21,
             ha="center", va="top", size=small_label_size, zorder=12)
-    ax.text(ANGLES[0]+ 0.012, (10**(max_log_exp-2)), "New mutant bioactivity points\n(Log scale)", rotation=-69,
+    ax.text(ANGLES[0]+ 0.012, (10**(max_log_exp-2)), f"Novel variant {bioactivity_text}\n(Log scale)", rotation=-69,
             ha="center", va="center", size=small_label_size, zorder=12)
 
     # Add legend -----------------------------------------------------
@@ -553,8 +587,19 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
     # Remove tick marks
     cb.ax.xaxis.set_tick_params(size=0, labelsize=medium_label_size)
 
+    # Make sure the colorbar ticks are integers
+    cbar_size = max(RATIO)
+    if cbar_size < 8:
+        cb.ax.xaxis.set_major_locator(plt.MultipleLocator(1))
+    if cbar_size < 15:
+        cb.ax.xaxis.set_major_locator(plt.MultipleLocator(2))
+    elif cbar_size < 50:
+        cb.ax.xaxis.set_major_locator(plt.MultipleLocator(5))
+    elif cbar_size < 100:
+        cb.ax.xaxis.set_major_locator(plt.MultipleLocator(20))
+
     # Set legend label and move it to the top (instead of default bottom)
-    cb.set_label("New mutant annotation ratio", size=label_size, labelpad=label_pad)
+    cb.set_label("Novel annotated variant bioactivity %", size=label_size, labelpad=label_pad)
 
     # Add annotations ------------------------------------------------
 
@@ -562,7 +607,7 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
     fig.subplots_adjust(top=0.8)
 
     # Define title, subtitle, and caption
-    title = "\nChEMBL mutant bioactivity datapoints\ndistribution accross protein families"
+    title = "\nChEMBL variant bioactivity datapoints\ndistribution accross protein families"
     subtitle = "\n".join([
         f"Level of protein family definition (ChEMBL) = {family_level}.\n",
         "The following data was calculated for the subset:",
@@ -574,6 +619,8 @@ def plot_circular_barplot_families_newannotations(annotated_data_families: pd.Da
     fig.text(0.1, 0.93, title, fontsize=25, weight="bold", ha="left", va="baseline")
     fig.text(0.1, 0.9, subtitle, fontsize=14, ha="left", va="top")
     # fig.text(0.5, 0.025, caption, fontsize=10, ha="center", va="baseline")
+
+    plt.tight_layout()
 
     if save:
         # Save figure
