@@ -105,15 +105,111 @@ def map_mutation_distance_Grantham(data: pd.DataFrame):
     :return: dataframe with bioactivity data and mutation distance annotated
     """
 
-def map_aa_change(data: pd.DataFrame, direction: bool = False):
+def extract_substitutions(data: pd.DataFrame):
+    """
+    Annotate unique amino acid substitutions for each target_id a dataframe
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :return: annotated dataframe
+    """
+    data_annotated = data.copy(deep=True)
+    data_annotated['mutations'] = data_annotated['target_id'].apply(lambda x: x.split('_')[1:])
+    data_annotated['aa_change'] = data_annotated['mutations'].apply(lambda x: '_'.join(x))
+
+    def extract_target_id_mutation_n(x):
+        if 'WT' in x:
+            return 0
+        elif 'MUTANT' in x:
+            return -1
+        else:
+            return len(x)
+    data_annotated['target_id_mutation_n'] = data_annotated['mutations'].apply(extract_target_id_mutation_n)
+
+    return data_annotated
+
+def keep_single_mutants(data: pd.DataFrame):
+    """
+    Keep only single mutants in the dataset
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :return: dataframe with bioactivity data and only single mutants
+    """
+    data_annotated = extract_substitutions(data)
+    data_annotated = data_annotated[data_annotated['target_id_mutation_n'] == 1]
+
+    return data_annotated
+
+def expand_single_mutations(data: pd.DataFrame, keep_only_single: bool = False):
+    """
+    Expand dataframe with single mutants to include all possible single mutants for each target_id
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :param keep_only_single: whether to keep only single mutants in the dataset. If keep_only_single is
+    True, only single mutants are kept. If keep_only_single is False and multiple mutants are present,
+    they are expanded to all possible single mutants
+    :return: dataframe with bioactivity data and all possible single mutants
+    """
+    if keep_only_single:
+        data_annotated = keep_single_mutants(data)
+    else:
+        data_annotated = extract_substitutions(data)
+
+    data_columns = data.columns.tolist()
+
+    # Expand DataFrame based on the number of mutations
+    expanded_data = []
+    for index, row in data_annotated.iterrows():
+        for mutation in row['mutations']:
+            expanded_data.append({
+                'target_id': row['target_id'],
+                'connectivity': row['connectivity'],
+                'aa_change': mutation,
+                'single_substitution': mutation,
+                'target_id_mutation_n': row['target_id_mutation_n']
+            })
+            # add rest of original columns
+            for col in data_columns:
+                if col not in ['target_id','mutations',
+                               'aa_change','target_id_mutation_n',
+                               'pchembl_value_Mean',
+                               'Activity_class_consensus'
+                               ]:
+                    expanded_data[-1][col] = row[col]
+
+    # Create expanded DataFrame
+    expanded_df = pd.DataFrame(expanded_data)
+    return expanded_df
+
+def unique_single_mutations(data: pd.DataFrame, accession: str):
+    """
+    Extract unique single mutations for a protein from a dataframe
+    :param data: dataframe with bioactivity data and mutations reflected in target_id
+    :param accession: Uniprot accession code
+    :return: dataframe with bioactivity data and only single mutants
+    """
+    data = data[data['target_id'].str.contains(accession)]
+
+    mutation_list = []
+    for target_id in data['target_id']:
+        for mutation in target_id.split('_')[1:]:
+            if mutation not in mutation_list:
+                mutation_list.append(mutation)
+
+    return mutation_list
+
+def map_aa_change(data: pd.DataFrame, direction: bool = False, keep_only_single: bool = False):
     """
     Annotate aminoacid change from wt to mutated aa
     :param data: dataframe with bioactivity data and mutations reflected in target_id
     :param direction: whether to take into account the direction of the mutation or just the change itself
-    :return: dataframe with bioactivity data and amino acid change annotated
+    :param keep_only_single: whether to keep only single mutants in the dataset. If keep_only_single is
+    True, only single mutants are kept. If keep_only_single is False and multiple mutants are present,
+    they are expanded to all possible single mutants
+    :return: dataframe with bioactivity data and amino acid change annotated expanded to all possible single mutants
     """
-    def extract_aa_change(x):
-        mutation = x['target_id'].split('_')[1]
+    # first decide what to do with multiple mutants
+    data_annotated = expand_single_mutations(data, keep_only_single)
+
+    # def extract_aa_change(x):
+    def extract_aa_change(mutation):
+        # mutation = x['target_id'].split('_')[1]
         if mutation == 'WT':
             aa_change = '-'
         elif mutation == 'MUTANT':
@@ -134,9 +230,11 @@ def map_aa_change(data: pd.DataFrame, direction: bool = False):
 
         return aa_change
 
-    data['aa_change'] = data.apply(extract_aa_change, axis=1)
+    # data['aa_change'] = data.apply(extract_aa_change, axis=1)
+    data_annotated['aa_change'] = data_annotated['aa_change'].apply(extract_aa_change)
 
-    return data
+    # return data
+    return data_annotated
 
 def map_mutation_type(data: pd.DataFrame):
     """
@@ -185,25 +283,21 @@ def map_mutation_type(data: pd.DataFrame):
         return mutation_type
 
     # Map mutation type to amino acid change in target_id
-    def map_mutation_type_target_id(x):
-        mutation = x['target_id'].split('_')[1]
-        if mutation == 'WT':
+    def map_mutation_type_target_id(mutation):
+        if mutation == '-': # WT or undefined mutation
             mutation_type = 'NA'
-        elif mutation == 'MUTANT':
-            mutation_type = 'NA' # Undefined mutation (low confidence)
         else:
             wt_aa = mutation[0]
             mut_aa = mutation[-1]
             mutation_type = define_mutation_type(wt_aa, mut_aa)
-
         return mutation_type
 
-    data['mutation_type'] = data.apply(map_mutation_type_target_id, axis=1)
+    data['mutation_type'] = data['aa_change'].apply(map_mutation_type_target_id)
 
     return data
 
 def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'activity',subset_col: str = None,
-                           subset_value: str = None):
+                           subset_value: str = None, keep_only_single: bool = False):
     """
     Plot in heatmap all unique amino acid change occurrences (number of activity datapoints or number of variants).
 
@@ -213,9 +307,13 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
         'variant' (number of variants), 'blosum' (BLOSUM62 matrix), or 'Epstein' (Epstein coefficient of difference).
     :param subset_col: column in data to subset by
     :param subset_value: value in subset_col to subset by
+    :param keep_only_single: whether to keep only single mutants in the dataset. If keep_only_single is
+    True, only single mutants are kept. If keep_only_single is False and multiple mutants are present,
+    they are expanded to all possible single mutants. In that case, the counted property of choice is counted
+    for each single mutant in the multiple mutant.
     """
     # Annotate bioactivity data with aa change and mutation type
-    data_aa_change = map_mutation_type(map_aa_change(data, direction=True))
+    data_aa_change = map_mutation_type(map_aa_change(data, direction=True, keep_only_single=keep_only_single))
 
     # Make a subset
     if subset_col is not None:
@@ -223,6 +321,11 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
         subset_flag = f'_{subset_col}-{subset_value}'
     else:
         subset_flag = ''
+
+    if keep_only_single:
+        subset_flag += '_single_mutants'
+    else:
+        subset_flag += '_all_mutants'
 
     # Keep only one datapoint per variant if plotting the number of variants instead of the number of datapoints
     if counts == 'variant':
@@ -238,7 +341,7 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
     blosum_dict = read_blosum()
 
     # Calculate statistics to plot in heatmap
-    stats = data_aa_change.groupby(['aa_change', 'mutation_type'])['pchembl_value_Mean'].count().reset_index()
+    stats = data_aa_change.groupby(['aa_change', 'mutation_type'])['connectivity'].count().reset_index()
     stats['distance_matrix'] = stats['aa_change'].apply(lambda x: distance_dict[x])
     stats['BLOSUM'] = stats['aa_change'].apply(lambda x: blosum_dict[x])
 
@@ -248,16 +351,16 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
 
     # Pivot statistics to plot in heatmap
     if (counts == 'activity') or (counts == 'variant'):
-        stats_heatmap = stats.pivot(columns='mut_aa',index='wt_aa',values='pchembl_value_Mean')
+        stats_heatmap = stats.pivot(columns='mut_aa',index='wt_aa',values='connectivity')
         if counts == 'activity':
             cbar_label = 'Number of bioactivity datapoints'
             # Report which are the most represented mutations
-            top10_aa_change = stats.sort_values('pchembl_value_Mean', ascending=False).head(10)['aa_change'].tolist()
+            top10_aa_change = stats.sort_values('connectivity', ascending=False).head(10)['aa_change'].tolist()
             top10_aa_change_mutations = data_aa_change[data_aa_change['aa_change'].isin(top10_aa_change)].groupby([
-                'target_id', 'aa_change'])['pchembl_value_Mean'].count().reset_index()
+                'target_id', 'aa_change'])['connectivity'].count().reset_index()
             top10_aa_change_mutations['aa_change_total'] = top10_aa_change_mutations['aa_change'].map(
-                stats.set_index('aa_change')['pchembl_value_Mean'])
-            top10_aa_change_mutations['aa_change_fraction'] = top10_aa_change_mutations['pchembl_value_Mean'] / \
+                stats.set_index('aa_change')['connectivity'])
+            top10_aa_change_mutations['aa_change_fraction'] = top10_aa_change_mutations['connectivity'] / \
                                                                 top10_aa_change_mutations['aa_change_total']
             top10_aa_change_mutations = top10_aa_change_mutations.sort_values(['aa_change_total','aa_change_fraction'],
                                                                               axis=0, ascending=False)
@@ -290,10 +393,9 @@ def plot_heatmap_aa_change(data: pd.DataFrame, output_dir: str, counts: str = 'a
     plt.savefig(os.path.join(output_dir,f'heatmap_{counts}{subset_flag}.png'),dpi=300)
     plt.close()
 
-def stats_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direction: bool = True, counts: str =
-'activity',
+def stats_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direction: bool = True, counts: str ='activity',
                                     color: str = 'mutation_type', subset_col: str = None, subset_value: str = None,
-                                    aa_change_labels: bool = True):
+                                    aa_change_labels: bool = True, keep_only_single: bool = False):
     """
     Plot in stacked bars all unique amino acid change occurrences (number of activity datapoints or number of
     variants) in each mutation type category.
@@ -308,10 +410,14 @@ def stats_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direct
     :param subset_col: column to make a subset for
     :param subset_value: value of the column in subset_col to filter on
     :param aa_change_labels: whether to include aa change labels on top of each stacked bar layer.
+    :param keep_only_single: whether to keep only single mutants in the dataset. If keep_only_single is
+    True, only single mutants are kept. If keep_only_single is False and multiple mutants are present,
+    they are expanded to all possible single mutants. In that case, the counted property of choice is counted
+    for each single mutant in the multiple mutant.
     :return: figure
     """
     # Annotate bioactivity data with aa change and mutation type
-    data_aa_change = map_mutation_type(map_aa_change(data, direction))
+    data_aa_change = map_mutation_type(map_aa_change(data, direction, keep_only_single=keep_only_single))
 
     # Make a subset
     if subset_col is not None:
@@ -320,21 +426,26 @@ def stats_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direct
     else:
         subset_flag = ''
 
+    if keep_only_single:
+        subset_flag += '_single_mutants'
+    else:
+        subset_flag += '_all_mutants'
+
     # Keep only one datapoint per variant if plotting the number of variants instead of the number of datapoints
     if counts == 'variant':
         data_aa_change = data_aa_change.drop_duplicates(subset='target_id', keep='first')
 
     # Calculate the number of counts (activity datapoints/variants) for each type of aa change
     stats = data_aa_change.groupby(['aa_change', 'mutation_type']).count()
-    plot_df = stats.loc[:, "pchembl_value_Mean"].reset_index()
+    plot_df = stats.loc[:, "connectivity"].reset_index()
     # Remove WT and undefined mutation instances (aa change == '-')
     plot_df = plot_df[plot_df['aa_change'] != '-']
     # Filter out silent mutations
     plot_df = plot_df[plot_df['aa_change'].apply(lambda x: x[0] != x[1])]
 
     # Order mutation types based on their total number of datapoints
-    stats_mutation_type = data_aa_change.groupby(['mutation_type']).count()['pchembl_value_Mean'].\
-        reset_index().sort_values(by='pchembl_value_Mean', axis=0, ascending=False)
+    stats_mutation_type = data_aa_change.groupby(['mutation_type']).count()['connectivity'].\
+        reset_index().sort_values(by='connectivity', axis=0, ascending=False)
     mutation_types = ['conservative', 'polar', 'size', 'charge', 'polar_size', 'charge_size']
     mutation_types_order = [x for x in stats_mutation_type['mutation_type'].tolist() if x != 'NA']
     mutation_types_order.extend([x for x in mutation_types if x not in mutation_types_order])
@@ -352,14 +463,14 @@ def stats_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direct
 
     # Count number of datapoints with distance >0.4
     plot_df['distance_0.4'] = plot_df['distance'].apply(lambda x: 1 if x >= 0.4 else 0)
-    plot_df['distance_0.4'] = plot_df['distance_0.4'] * plot_df['pchembl_value_Mean']
+    plot_df['distance_0.4'] = plot_df['distance_0.4'] * plot_df['connectivity']
 
 
     return plot_df
 
 def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, direction: bool = True, counts: str = 'activity',
                                     color: str = 'mutation_type', subset_col: str = None, subset_value: str = None,
-                                    aa_change_labels: bool = True):
+                                    aa_change_labels: bool = True, keep_only_single: bool = False):
     """
     Plot in stacked bars all unique amino acid change occurrences (number of activity datapoints or number of
     variants) in each mutation type category.
@@ -374,10 +485,14 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
     :param subset_col: column to make a subset for
     :param subset_value: value of the column in subset_col to filter on
     :param aa_change_labels: whether to include aa change labels on top of each stacked bar layer.
+    :param keep_only_single: whether to keep only single mutants in the dataset. If keep_only_single is
+    True, only single mutants are kept. If keep_only_single is False and multiple mutants are present,
+    they are expanded to all possible single mutants. In that case, the counted property of choice is counted
+    for each single mutant in the multiple mutant.
     :return: figure
     """
     # Annotate bioactivity data with aa change and mutation type
-    data_aa_change = map_mutation_type(map_aa_change(data, direction))
+    data_aa_change = map_mutation_type(map_aa_change(data, direction, keep_only_single=keep_only_single))
 
     # Make a subset
     if subset_col is not None:
@@ -386,21 +501,26 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
     else:
         subset_flag = ''
 
+    if keep_only_single:
+        subset_flag += '_single_mutants'
+    else:
+        subset_flag += '_all_mutants'
+
     # Keep only one datapoint per variant if plotting the number of variants instead of the number of datapoints
     if counts == 'variant':
         data_aa_change = data_aa_change.drop_duplicates(subset='target_id', keep='first')
 
     # Calculate the number of counts (activity datapoints/variants) for each type of aa change
     stats = data_aa_change.groupby(['aa_change', 'mutation_type']).count()
-    plot_df = stats.loc[:, "pchembl_value_Mean"].reset_index()
+    plot_df = stats.loc[:, "connectivity"].reset_index()
     # Remove WT and undefined mutation instances (aa change == '-')
     plot_df = plot_df[plot_df['aa_change'] != '-']
     # Filter out silent mutations
     plot_df = plot_df[plot_df['aa_change'].apply(lambda x: x[0] != x[1])]
 
     # Order mutation types based on their total number of datapoints
-    stats_mutation_type = data_aa_change.groupby(['mutation_type']).count()['pchembl_value_Mean'].\
-        reset_index().sort_values(by='pchembl_value_Mean', axis=0, ascending=False)
+    stats_mutation_type = data_aa_change.groupby(['mutation_type']).count()['connectivity'].\
+        reset_index().sort_values(by='connectivity', axis=0, ascending=False)
     mutation_types = ['conservative', 'polar', 'size', 'charge', 'polar_size', 'charge_size']
     mutation_types_order = [x for x in stats_mutation_type['mutation_type'].tolist() if x != 'NA']
     mutation_types_order.extend([x for x in mutation_types if x not in mutation_types_order])
@@ -426,7 +546,7 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
         mutation_type_df = plot_df[plot_df['mutation_type'] == mutation_type].sort_values(by='distance',
                                                                                            ascending=False,axis=0)
         aa_changes = mutation_type_df['aa_change'].tolist()
-        aa_change_counts = mutation_type_df['pchembl_value_Mean'].tolist()
+        aa_change_counts = mutation_type_df['connectivity'].tolist()
         bar_values[mutation_type] = aa_change_counts
         bar_labels[mutation_type] = aa_changes
 
@@ -482,7 +602,7 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
     # Add color legend
     if color == 'mutation_type':
         legend = [mpatches.Patch(color=v, label=k.replace('_',' ').capitalize()) for k,v in palette_dict.items()]
-        plt.legend(handles=legend, title='Mutation type (severity)', loc='center left', bbox_to_anchor=(1, 0.5))
+        plt.legend(handles=legend, title='Substitution type (severity)', loc='center left', bbox_to_anchor=(1, 0.5))
 
 
     # Make plot prettier
@@ -508,10 +628,10 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
     ax.set_xlabel(x_label, labelpad=10, weight='bold', size=14)
 
     # Set y-axis label
-    ax.set_ylabel("Mutation type", labelpad=10, weight='bold', size=14)
+    ax.set_ylabel("Substitution type", labelpad=10, weight='bold', size=14)
 
     # Set title
-    plt.suptitle(f'Mutation types present in ChEMBL + Papyrus bioactivity datasets', fontsize=16)
+    plt.suptitle(f'Substitution types present in ChEMBL + Papyrus bioactivity datasets', fontsize=16)
     if subset_col is not None:
         if subset_col == 'accession':
             # map accession to gene name
@@ -555,9 +675,11 @@ def plot_stacked_bars_mutation_type(data: pd.DataFrame, output_dir: str, directi
 
 def extract_residue_number_list(target_id_list: list):
     """
-    From a list of unique target_id, extract the residue number of the first mutation
+    From a list of unique target_id, extract the residue number of the mutation for each target_id
+    Results from the extraction are stored in a list of lists, where each sublist contains the residue numbers of the
+    mutations for each target_id. WT and undefined mutations are stored as 'WT' and 'MUTANT' respectively.
     :param target_id_list: list of unique target_id
-    :return: list
+    :return: list of lists with residue numbers of mutations for each target_id
     """
     mutants_resn = []
     for target_id in target_id_list:
@@ -566,15 +688,18 @@ def extract_residue_number_list(target_id_list: list):
         elif 'MUTANT' in target_id:  # Undefined mutant
             mutants_resn.append('MUTANT')
         else:
-            mutants_resn.append(int(target_id.split('_')[1][1:-1]))
+            substitutions = target_id.split('_')[1:]
+            mutants_resn.append([int(substitution[1:-1]) for substitution in substitutions])
+
     return mutants_resn
 
 
 def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subset_alias: str, dist_dir: str,
-                                  output_dir: str, direction: bool = True, ignore_no_structure: bool = False):
+                                  output_dir: str, direction: bool = True, ignore_no_structure: bool = False,
+                                  keep_only_single: bool = True, sum_multiple_mutants: bool = False):
     """
     Plot bubble plot for all mutants of targets of interest (accession), showing aa distance matrix value (X axis) vs.
-    distance from mutated residue to ligand COG (Y axis). Color represents mutation type and bubble size number of
+    distance from mutated residue to ligand centroid (Y axis). Color represents mutation type and bubble size number of
     bioactivity.
     :param data: dataframe with bioactivity data and mutations reflected in target_id
     :param accession_list: List of Uniprot accession codes to targets of interest
@@ -582,12 +707,25 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     :param dist_dir: Path to directory containing the distance dictionaries
     :param output_dir: path to directory to store output
     :param direction: whether to take into account the direction of the mutation or just the change itself
-    :param ignore_no_structure: whether to ignore accession codes for which the distance to ligand COG cannot be
+    :param ignore_no_structure: whether to ignore accession codes for which the distance to ligand centroid cannot be
     calculated due to lack of structures
+    :param keep_only_single: whether to keep only single mutants in the dataset. If keep_only_single is
+    True, only single mutants are kept. If keep_only_single is False and multiple mutants are present,
+    they are expanded to all possible single mutants. In that case, the amount of data is counted
+    for each single mutant in the multiple mutant.
+    :param sum_multiple_mutants: whether to sum the number of bioactivity datapoints for each single substitution
     :return: figure
     """
     # Subset accession codes
     data = data[data['accession'].isin(accession_list)]
+
+    if keep_only_single:
+        subset_alias += '_single_mutants'
+    else:
+        subset_alias += '_all_mutants'
+        if sum_multiple_mutants:
+            subset_alias += '_sum'
+
 
     # Extract gene names for later mapping
     gene_dict = dict(zip(data['accession'],data['HGNC_symbol'].fillna('NaN')))
@@ -604,16 +742,15 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
 
 
     # Annotate bioactivity data with aa change and mutation type
-    data_aa_change = map_mutation_type(map_aa_change(data, direction))
+    data_aa_change = map_mutation_type(map_aa_change(data, direction, keep_only_single=keep_only_single))
 
     # Drop WT and undefined mutation instances
     data_aa_change = data_aa_change[data_aa_change['aa_change'] != '-']
     # Filter out silent mutations
     data_aa_change = data_aa_change[data_aa_change['aa_change'].apply(lambda x: x[0] != x[1])]
-
     # Calculate the number of counts (activity datapoints/variants) for each type of aa change
-    stats = data_aa_change.groupby(['target_id', 'aa_change', 'mutation_type']).count()
-    plot_df = stats.loc[:, "pchembl_value_Mean"].reset_index()
+    stats = data_aa_change.groupby(['target_id', 'aa_change', 'single_substitution', 'mutation_type']).count()
+    plot_df = stats.loc[:, "connectivity"].reset_index()
 
     # Annotate amino acid change distance matrix
     if direction:
@@ -629,8 +766,11 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     accession_list_clean = []
     for accession in accession_list:
         try:
-            target_id_list = [target_id for target_id in plot_df['target_id'].tolist() if accession in target_id]
-            mutants_resn = extract_residue_number_list(target_id_list)
+            # Extract all possible single mutations for the target
+            # target_id_list = [target_id for target_id in plot_df['target_id'].tolist() if accession in target_id]
+            # mutants_resn_old = extract_residue_number_list(target_id_list)
+            unique_mutations = unique_single_mutations(plot_df, accession)
+            mutants_resn = [int(mutation[1:-1]) for mutation in unique_mutations]
         except ValueError:
             mutants_resn = []
         distances_dict_accession = calculate_average_residue_distance_to_ligand(accession=accession,
@@ -655,12 +795,21 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
             return 0
         else:
             try:
-                return distances_dict[target_id.split('_')[0]][target_id.split('_')[1][1:-1]]
+                single_mutation = row['single_substitution']
+                single_mutation_residue = single_mutation[1:-1]
+                return distances_dict[target_id.split('_')[0]][single_mutation_residue]
             except KeyError:
                 return 0
 
     plot_df['mutant_dist'] = plot_df.apply(map_distance_to_mutant, axis=1)
-    print(plot_df.sort_values(by='pchembl_value_Mean', ascending=False))
+    if keep_only_single or (not sum_multiple_mutants):
+        print(plot_df.sort_values(by='connectivity', ascending=False))
+    else:
+        if sum_multiple_mutants:
+            # sum connectivity for each single substitution. Keep list of different target_ids
+            plot_df = plot_df.groupby(['single_substitution','aa_change', 'mutation_type', 'distance_matrix',
+                                       'mutant_dist']).agg({'connectivity':'sum', 'target_id': lambda x: list(x)}).reset_index()
+            print(plot_df.sort_values(by='connectivity', ascending=False))
 
     # Define colors for mutation types, map to color property
     mutation_types = ['conservative', 'polar', 'size', 'charge', 'polar_size', 'charge_size']
@@ -680,7 +829,7 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     scatter = plt.scatter(
         x=plot_df['distance_matrix'],
         y=plot_df['mutant_dist'],
-        s=plot_df['pchembl_value_Mean'],
+        s=plot_df['connectivity'],
         c=plot_df['mutation_type_color'],
         label=plot_df['mutation_type'],
         cmap="Accent",
@@ -699,7 +848,7 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
         x_label = "Grantham's distance"
     plt.xlabel(x_label, labelpad=10, weight='bold', size=14)
 
-    plt.ylabel("Average distance of mutated\nresidue to ligand COG ($\AA$)",
+    plt.ylabel("Average distance of substituted\nresidue to ligand centroid ($\AA$)",
                labelpad=10, weight='bold', size=14)
     # map accession list to gene names
     if len(accession_list_clean) < 10:
@@ -712,7 +861,7 @@ def plot_bubble_aachange_distance(data: pd.DataFrame, accession_list: list, subs
     handles = [mpl.lines.Line2D([0], [0], marker='o', alpha=0.6, linewidth=0, color=v,markeredgecolor='white',
                                 label=k.replace('_',' ').capitalize(),markersize=7) for k,v in palette_dict.items()]
     legend1 = ax.legend(handles=handles,
-                        title='Mutation type', loc='lower left',
+                        title='Substitution type', loc='lower left',
                         bbox_to_anchor=(1,0.45),fontsize="12")
     ax.add_artist(legend1)
 
