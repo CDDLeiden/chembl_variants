@@ -101,7 +101,7 @@ def double_density_pchembl_year(accession_data, subset, output_dir, accession, s
     g.plot_marginals(sns.kdeplot)
 
     # Make plot prettier
-    sns.move_legend(g.ax_joint, "upper left", title='Mutants', frameon=False, bbox_to_anchor=(1.25, 1))
+    sns.move_legend(g.ax_joint, "upper left", title='Variants', frameon=False, bbox_to_anchor=(1.25, 1))
 
     g.ax_joint.set_ylabel('pChEMBL value (Mean)')
 
@@ -312,7 +312,7 @@ def plot_stats_bubble(stats: pd.DataFrame, filter_tag: str, hue_property: str, h
     l_modified = copy.deepcopy(l)
     l_modified[0] = hue_title
     l_size_index = l.index('data_mutant_percentage')
-    l_modified[l_size_index] = 'Mutant bioactivity %'
+    l_modified[l_size_index] = 'Variant bioactivity %'
     g.legend(h, l_modified, loc='center left', bbox_to_anchor=(1.05, 0.5), ncol=1)
 
     # Zoom in
@@ -377,7 +377,7 @@ def plot_stats_histograms(stats: pd.DataFrame, output_dir:str, save: bool = Fals
     # Plot 2
     sns.histplot(stats, x='data_mutant_percentage',
                  bins=10,log_scale=False,color='#277f8e')
-    plt.xlabel('Mutant bioactivity %')
+    plt.xlabel('Variant bioactivity %')
     if save:
         plt.savefig(os.path.join(output_dir, 'histogram_data_mutant_percentage.svg'))
         plt.clf()
@@ -399,7 +399,7 @@ def plot_stats_histograms(stats: pd.DataFrame, output_dir:str, save: bool = Fals
                  bins=10, discrete=(False, False), log_scale=(True, False), color='#1fa187',
         cbar=True, cbar_kws=dict(shrink=.75))
     plt.xlabel('Number of bioactivity datapoints (log)')
-    plt.ylabel('Mutant bioactivity %')
+    plt.ylabel('Variant bioactivity %')
     if save:
         plt.savefig(os.path.join(output_dir, 'histogram_n_data_mutant_percentage.svg'))
         plt.clf()
@@ -411,7 +411,7 @@ def plot_stats_histograms(stats: pd.DataFrame, output_dir:str, save: bool = Fals
                  bins=10, discrete=(False, False), log_scale=(False, False), color='#a0da39',
         cbar=True, cbar_kws=dict(shrink=.75))
     plt.xlabel('Number of variants')
-    plt.ylabel('Mutant bioactivity %')
+    plt.ylabel('Variant bioactivity %')
     if save:
         plt.savefig(os.path.join(output_dir, 'histogram_n_variants_mutant_percentage.svg'))
         plt.clf()
@@ -469,7 +469,7 @@ def plot_variant_stats_lineplot(stats: pd.DataFrame, filter_tag:str, y_column:st
     plt.axhline(y=500, linestyle=':', color='grey')
 
     # Change legend title
-    plt.legend(title='Accession (mutant %)')
+    plt.legend(title='Accession (variant %)')
     # Change axes titles
     plt.ylabel(y_label)
     plt.xlabel('Variant number')
