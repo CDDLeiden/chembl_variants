@@ -228,7 +228,6 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
 
         # Calculate distance to ligand from mutated residues
         target_id_list = pivoted_data.index.tolist()
-        # mutants_resn = extract_residue_number_list(target_id_list)
         unique_mutations = unique_single_mutations(pivoted_data.reset_index(), accession)
         mutants_resn = [int(mutation[1:-1]) for mutation in unique_mutations if mutation != 'WT' and mutation != 'MUTANT']
 
@@ -314,10 +313,48 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
     elif variant_annotation == 'aa_change_epstein':
         epstein_dict = kwargs['epstein_dict']
 
+        try:
+            multiple_mutants = kwargs['multiple_mutants'] # what to do with multiple mutants
+        except KeyError:
+            print('kwarg "multiple_mutants" to handle multiple mutants is not specified. Using mean Epstein '
+                  'coefficient of difference.')
+            multiple_mutants = 'mean'
+
         # Map amino acid change to its Epstein coefficient
-        mutants_epstein = [epstein_dict[f"{target_id.split('_')[1][0]}{target_id.split('_')[1][-1]}"] if
-                           ((target_id.split('_')[1] != 'WT') and (target_id.split('_')[1] != 'MUTANT')) else 0 for
-                           target_id in pivoted_data.index.tolist()]
+        single_mutations_list = []
+        for target_id in pivoted_data.index.tolist():
+            substitutions = target_id.split('_')[1:]
+            target_id_mutations_list = []
+            for substitution in substitutions:
+                if substitution == 'WT' or substitution == 'MUTANT':
+                    target_id_mutations_list.append('-')
+                else:
+                    aa_change = substitution[0] + substitution[-1]
+                    target_id_mutations_list.append(aa_change)
+            single_mutations_list.append(target_id_mutations_list)
+
+        mutants_epstein = []
+        for target_id in single_mutations_list:
+            if target_id == ['-']:
+                mutants_epstein.append(0)
+            else:
+                target_epstein = []
+                for aa in target_id:
+                    try:
+                        target_epstein.append(epstein_dict[aa])
+                    except KeyError:
+                        pass
+                if len(target_epstein) == 0:
+                    mutants_epstein.append(0)
+                elif len(target_epstein) == 1:
+                    mutants_epstein.append(target_epstein[0])
+                else:
+                    if multiple_mutants == 'mean':
+                        mutants_epstein.append(np.mean(target_epstein))
+                    elif multiple_mutants == 'min':
+                        mutants_epstein.append(min(target_epstein))
+                    elif multiple_mutants == 'max':
+                        mutants_epstein.append(max(target_epstein))
 
         # Create color map based on distances
         COLORS = sns.light_palette("darkred", reverse=False, as_cmap=False)
@@ -342,7 +379,11 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
                        linewidth=0.1, linecolor='w', cbar_kws={'label': 'pChEMBL value (Mean)'},
                        row_colors=COLORS)
         # save figure
-        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_epstein_groups.svg'))
+        multiple_tag = ''
+        if multiple_mutants is not None:
+            multiple_tag = f'_multiple_{multiple_mutants}'
+
+        plt.savefig(os.path.join(output_dir, accession,f'clustermap_{accession}_epstein{multiple_tag}_groups.svg'))
 
         # Create the colorbar
         pl.figure(figsize=(4, 0.5))
@@ -361,7 +402,7 @@ def plot_bioactivity_clustermap(accession: str, pivoted_data: pd.DataFrame, comp
         cb.set_label("Epstein coefficient of difference", size=10, labelpad=10)
 
         # save figure
-        plt.savefig(os.path.join(output_dir, accession, f'clustermap_{accession}_epstein_groups_legend.svg'))
+        plt.savefig(os.path.join(output_dir, accession, f'clustermap_{accession}_epstein{multiple_tag}_groups_legend.svg'))
 
 
 
