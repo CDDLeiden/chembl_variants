@@ -1,4 +1,13 @@
-# Generated data
+
+analysis/0_annotation_analysis/*
+analysis/1_mutant_statistics/*
+analysis/BAK.modelling_scatter*
+*.tsv.xz
+*.svg
+*.zip
+*.rar
+analysis/2_modelling_analysis/*
+
 data/*
 
 # Byte-compiled / optimized / DLL files
