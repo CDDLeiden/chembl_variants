@@ -9,6 +9,7 @@ import os
 import re
 import json
 import matplotlib.pyplot as plt
+import chembl_downloader
 
 from mycolorpy import colorlist as mcp
 import numpy as np
@@ -36,10 +37,225 @@ rdDepictor.SetPreferCoordGen(True)
 from IPython.display import SVG,Image
 from ipywidgets import interact
 
+from .data_path import get_data_path
 from .preprocessing import merge_chembl_papyrus_mutants
 from .mutant_analysis_accession import filter_accession_data
 from .mutant_analysis_common_subsets import compute_variant_activity_distribution, get_variant_common_subset, define_consistent_palette
 
+
+def downlaod_chembl_compounds(chembl_version: str, data_folder: str = None):
+    """Download ChEMBL compounds.
+
+    :param chembl_version: version of chembl to work with
+    :param data_folder: path to the folder in which the ChEMBL
+    SQLite database is located or will be downloaded (default:
+    pystow's default directory)
+    """
+    if data_folder is not None:
+        os.environ['PYSTOW_HOME'] = data_folder
+
+    data_dir = get_data_path()
+    chembl_file = os.path.join(data_dir, f'chembl{chembl_version}_compound_info.csv')
+
+    if not os.path.isfile(chembl_file):
+        # Query ChEMBL for compound descriptions
+        query = """
+                    SELECT molecule_dictionary.molregno,molecule_dictionary.chembl_id,molecule_dictionary.pref_name,
+                    molecule_dictionary.max_phase,
+                    molecule_dictionary.therapeutic_flag,molecule_dictionary.natural_product,
+                    molecule_dictionary.molecule_type,molecule_dictionary.first_approval,molecule_dictionary.oral,
+                    molecule_dictionary.parenteral,molecule_dictionary.topical,molecule_hierarchy
+                    .parent_molregno,compound_structures.canonical_smiles,
+                    compound_structures.standard_inchi,compound_structures.standard_inchi_key,drug_mechanism
+                    .mechanism_of_action,drug_mechanism.action_type,drug_mechanism
+                    .mechanism_comment,drug_mechanism
+                    .selectivity_comment,component_sequences.accession,variant_sequences.mutation,drug_indication
+                    .max_phase_for_ind,drug_indication.mesh_heading
+                    FROM molecule_dictionary
+                        LEFT JOIN molecule_hierarchy
+                            ON molecule_dictionary.molregno = molecule_hierarchy.molregno
+                        LEFT JOIN compound_structures USING (molregno)
+                        LEFT JOIN drug_mechanism
+                            ON molecule_dictionary.molregno = drug_mechanism.molregno
+                        LEFT JOIN drug_indication
+                            ON molecule_dictionary.molregno = drug_indication.molregno
+                        LEFT JOIN target_dictionary
+                            ON drug_mechanism.tid = target_dictionary.tid
+                        LEFT JOIN target_components
+                            ON target_dictionary.tid = target_components.tid
+                        LEFT JOIN component_sequences
+                            ON target_components.component_id = component_sequences.component_id
+                        LEFT JOIN variant_sequences
+                            ON drug_mechanism.variant_id = variant_sequences.variant_id
+
+                    """
+
+        chembl_compounds = chembl_downloader.query(query, version=chembl_version,
+                                                   prefix=['mutants-in-pcm', 'chembl'])
+
+        # Check whether the compound is the parent molecule
+        def is_parent(x):
+            if x['parent_molregno'] == x['molregno']:
+                return True
+            else:
+                return False
+
+        chembl_compounds['is_parent'] = chembl_compounds.apply(is_parent, axis=1)
+        # Make indications column with mesh and max phase for the indication to facilitate merging later
+        chembl_compounds['indications'] = chembl_compounds.apply(lambda x: f'{x.mesh_heading} ({x.max_phase_for_ind})',
+                                                                 axis=1)
+
+        # Save results
+        chembl_compounds.to_csv(chembl_file, sep='\t', index=None)
+
+    else:
+        print('ChEMBL compound file already exists. Reading it.')
+        chembl_compounds = pd.read_csv(chembl_file, sep='\t')
+
+    return chembl_compounds
+
+
+def group_unique_df(df, groupby_cols):
+    """Group a dataframe by a list of columns and return a dataframe with the unique values of each column.
+    """
+    grouped_df = df.groupby(groupby_cols, dropna=False).agg(['unique'])  # Important: keep NAs
+    # Drop the multiindex
+    grouped_df.columns = grouped_df.columns.droplevel(1)
+    # Convert the unique values to strings
+    grouped_df = grouped_df.applymap(lambda x: x[0] if len(x) == 1 else ';'.join(str(i) for i in x))
+    # Reset the index
+    grouped_df = grouped_df.reset_index()
+
+    return grouped_df
+
+
+def has_parent_moa(x):
+    """Check whether a compound is a parent molecule with a mechanism of action."""
+    if (x['is_parent'] == True) and (str(x['accession']) not in ['NaN', 'nan', 'None']):
+        return True
+    else:
+        return False
+
+
+def fix_parent_moa(chembl_version: str, data_folder: str = None):
+    """Fix the mechanism of action of parent molecules.
+
+    :param chembl_version: version of chembl to work with
+    :param data_folder: path to the folder in which the ChEMBL
+    """
+    if data_folder is not None:
+        os.environ['PYSTOW_HOME'] = data_folder
+
+    data_dir = get_data_path()
+    fixed_chembl_file = os.path.join(data_dir, f'chembl{chembl_version}_compound_info_fixed_MOA.csv')
+
+    df = downlaod_chembl_compounds(chembl_version, data_folder)
+
+    if not os.path.isfile(fixed_chembl_file):
+        # Check if the parent compound has a MOA (accession defined)
+        df['has_parent_moa'] = df.apply(has_parent_moa, axis=1)
+
+        # Create dataframe to check which compounds need to be fixed (add a MOA to the parent compound)
+        check_parent_moa = df.groupby(['parent_molregno'], dropna=False).agg({'accession': 'nunique',
+                                                                              'chembl_id': 'nunique',
+                                                                              'has_parent_moa': 'unique'})
+
+        # Keep only the parent compounds that need to be fixed and those that can help fix the parent compound
+        # (i.e. the parent compound does not have a MOA and it has at least one child compound with a MOA)
+        to_fix = check_parent_moa[(check_parent_moa['chembl_id'] > 1) & (check_parent_moa['accession'] > 0) &
+                                  (check_parent_moa['has_parent_moa'].apply(lambda x: True not in x))].index.to_list()
+
+        # Check which parent compounds need to be fixed
+        parents_to_fix = df[(df['parent_molregno'].isin(to_fix)) & (df['is_parent'] == True)]
+        # Keep only one row per parent compound (merging all unique indication information)
+        parents_to_fix_unique = group_unique_df(parents_to_fix, ['chembl_id'])
+
+        # Check which child compounds can help fix the parent compound
+        children_to_fix = df[(df['parent_molregno'].isin(to_fix)) & (df['is_parent'] == False)]
+        # Keep only one row per child compound - accession pair (merging all unique indication information)
+        children_to_fix_unique = group_unique_df(children_to_fix, ['chembl_id', 'accession'])
+        # Rename all columns to avoid confusion when merging
+        children_to_fix_unique.columns = (children_to_fix_unique.
+                                          columns.map(lambda x: f'{x}_child' if x != 'parent_molregno' else x))
+        # Keep columns of interest
+        children_to_fix_unique = children_to_fix_unique[['parent_molregno', 'chembl_id_child', 'pref_name_child',
+                                                         'max_phase_child',
+                                                         'accession_child', 'mutation_child',
+                                                         'mechanism_of_action_child',
+                                                         'action_type_child', 'mechanism_comment_child',
+                                                         'selectivity_comment_child',
+                                                         'indications_child']]
+
+        # Merge parent and child compounds to annotate parent with the child information
+        parents_fixed = pd.merge(parents_to_fix_unique, children_to_fix_unique, on='parent_molregno', how='left')
+        # Keep one row per parent compound with unique information
+        parents_fixed_unique = group_unique_df(parents_fixed, ['chembl_id'])
+
+        # Merge the fixed parent compounds with the original dataframe
+        # First keep also one row per original compound with unique information
+        df_unique = group_unique_df(df, ['chembl_id'])
+        print(f'Number of compounds before fixing: {len(df_unique)}')
+        # Remove compounds that need to be fixed
+        df_unique = df_unique[~df_unique['chembl_id'].isin(parents_to_fix_unique['chembl_id'].tolist())]
+        print(f'Number of unique compounds before fixing: {len(df_unique)}')
+        # Merge the fixed parent compounds with the original dataframe
+        df_fixed = pd.concat([df_unique, parents_fixed_unique], ignore_index=True)
+        print(f'Number of unique compounds after fixing: {len(df_fixed)}')
+
+        # Save results
+        df_fixed.to_csv(fixed_chembl_file, sep='\t', index=None)
+
+    else:
+        print('Fixed MOA file already exists. Reading it.')
+        df_fixed = pd.read_csv(fixed_chembl_file, sep='\t')
+
+    return df_fixed
+
+
+def map_chembl_compounds(chembl_version: str, papyrus_version: str, papyrus_flavor: str,
+                         chunksize: int, annotation_round: int, data_folder: str = None):
+    """Obtain compound descriptions from ChEMBL whenever possible.
+
+    :param chembl_version: version of chembl to work with
+    :param papyrus_version: version of papyrus to work with
+    :param papyrus_flavor: flavor of papyrus to work with
+    :param chunksize: size of chunks of data to be used (default: None)
+    :param annotation_round: round of annotation to work with
+    :param data_folder: path to the folder in which the ChEMBL
+    SQLite database is located or will be downloaded (default:
+    pystow's default directory)
+    """
+    if data_folder is not None:
+        os.environ['PYSTOW_HOME'] = data_folder
+
+    data_dir = get_data_path()
+    project_compounds_file = os.path.join(data_dir, f'chembl{chembl_version}_papyrus{papyrus_version}' \
+                                                    f'{papyrus_flavor}_round{annotation_round}_compound_mapping.csv')
+
+    if not os.path.isfile(project_compounds_file):
+        # Read unique compounds from ChEMBL/Papyrus annotated mutant data
+        annotated_data = merge_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor,
+                                                      chunksize, annotation_round)
+
+        # Keep compounds with ChEMBL IDs
+        annotated_data = annotated_data[annotated_data['CID'].str.contains('CHEMBL')]
+        unique_compounds = annotated_data[['connectivity', 'CID']].drop_duplicates().sort_values('connectivity')
+
+        # Download ChEMBL compound descriptions and path parent MOA with child compounds if needed
+        chembl_compounds_fixed = fix_parent_moa(chembl_version, data_folder)
+
+        # Merge ChEMBL compound descriptions with unique compounds
+        mapped_compounds = pd.merge(unique_compounds, chembl_compounds_fixed, left_on='CID',
+                                    right_on='chembl_id', how='left').fillna('NA')
+
+        # Save results
+        mapped_compounds.to_csv(project_compounds_file, sep='\t', index=None)
+
+    else:
+        print('ChEMBL/Papyrus compound mapping file already exists. Reading it.')
+        mapped_compounds = pd.read_csv(project_compounds_file, sep='\t')
+
+    return mapped_compounds
 
 def GetRingSystems(mol, includeSpiro: bool = False):
     """
@@ -90,6 +306,8 @@ def visualize_molecular_subset_highlights(accession: str, accession_data: pd.Dat
 
     # Extract RDkit molecular objects
     mMols = subset_df['Molecule'].tolist()
+    subset_legend = subset_df['connectivity'].tolist() # Just in case the order does not fully match with the
+    # original subset list
 
     if match_type == 'Murcko':
         murckoList = [Chem.Scaffolds.MurckoScaffold.GetScaffoldForMol(mMol) for mMol in mMols]
@@ -116,7 +334,7 @@ def visualize_molecular_subset_highlights(accession: str, accession_data: pd.Dat
 
 
     # Draw molecules in grid with the highlight defined
-    img = Draw.MolsToGridImage(mMols, legends=subset,
+    img = Draw.MolsToGridImage(mMols, legends=subset_legend,
                                highlightAtomLists=highlight_match,
                                subImgSize=(500, 500), useSVG=False, molsPerRow=5, returnPNG=False)
 
@@ -230,8 +448,11 @@ def get_clustering_stats(accession: str, output_dir: str, subset_alias:str, cuto
     :param output_dir: path to output directory
     :param cutoff: distance cutoff to the cluster central molecule for molecule inclusion in cluster
     """
-    with open(os.path.join(output_dir, accession, f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.json')) as \
-            in_file:
+    if subset_alias == 'strictly_common_subset': # Clustermap analysis
+        path_to_file = os.path.join(output_dir, accession)
+    elif subset_alias in ['full_set', 'full_dual_tested_set']: # Bubbleplot analysis
+        path_to_file = os.path.join(output_dir, accession, subset_alias)
+    with open(os.path.join(path_to_file, f'{accession}_{subset_alias}_ButinaClusters_{cutoff}.json')) as in_file:
         connectivity_cluster_dict = json.load(in_file)
 
     # Get cluster sizes
@@ -245,9 +466,11 @@ def get_clustering_stats(accession: str, output_dir: str, subset_alias:str, cuto
     for c,s in zip(clusters,cluster_sizes):
         print(f'Cluster {c}: {s} compounds')
 
+    return connectivity_cluster_dict
+
 
 def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_round:str, output_dir: str,
-                                                 replot: bool = False):
+                                                 min_common: bool = True, replot: bool = False):
     """
     Plot bioactivity distribution of compounds in clusters of the common subset. In this case,
     the common subset is very lax and includes all compounds that have been tested in at least
@@ -256,6 +479,7 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
     :param accession: Uniprot accession code
     :param annotation_round: round of annotation following further curation
     :param output_dir: path to write the results to
+    :param min_common: whether to use the minimum common subset (tested in at least two variants) or the true full set
     :param replot: whether to replot existing bioactivity distribution plotting results
     """
     # Load data
@@ -266,16 +490,35 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
     if not os.path.exists(os.path.join(output_dir, accession)):
         os.mkdir(os.path.join(output_dir, accession))
 
-    # Get common subset (compounds tested in at least two variants)
-    common_data, coverage_dict = get_variant_common_subset(accession_data, accession, True, 2,
-                                                           None, False, os.path.join(output_dir, accession))
+    if min_common:
+        # Get common subset (compounds tested in at least two variants)
+        min_threshold = 2
+
+        dataset_alias = 'full_dual_tested_set'
+
+        if not os.path.exists(os.path.join(output_dir, accession, dataset_alias)):
+            os.mkdir(os.path.join(output_dir, accession, dataset_alias))
+
+        common_data, coverage_dict = get_variant_common_subset(accession_data, accession, True, min_threshold,
+                                                               None, False, os.path.join(output_dir, accession))
+    else:
+        dataset_alias = 'full_set'
+
+        if not os.path.exists(os.path.join(output_dir, accession, dataset_alias)):
+            os.mkdir(os.path.join(output_dir, accession, dataset_alias))
+
+        # Use full set
+        common_data = accession_data
+
     # Extract list of compounds in the common subset
     accession_data_common = accession_data[accession_data['connectivity'].
         isin(common_data['connectivity'].unique().tolist())]
 
     # Check if clustering was already done, if so read in results
-    if os.path.exists(os.path.join(output_dir, accession, f'{accession}_full_set_ButinaClusters_0.5.json')):
-        with open(os.path.join(output_dir, accession, f'{accession}_full_set_ButinaClusters_0.5.json'), 'r') as in_file:
+    if os.path.exists(os.path.join(output_dir, accession, dataset_alias,
+                                   f'{accession}_{dataset_alias}_ButinaClusters_0.5.json')):
+        with open(os.path.join(output_dir, accession, dataset_alias,
+                               f'{accession}_{dataset_alias}_ButinaClusters_0.5.json'), 'r') as in_file:
             connectivity_cluster_dict = json.load(in_file)
             print(f'Loaded {len(connectivity_cluster_dict)} clusters for {accession}')
     else:
@@ -283,7 +526,7 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
         clusters, compounds, connectivity_cluster_dict = \
             butina_cluster_compounds(accession, accession_data_common,
                                      accession_data_common.connectivity.unique().tolist(),
-                                     'full_set', os.path.join(output_dir, accession), 0.5)
+                                     dataset_alias, os.path.join(output_dir, accession, dataset_alias), 0.5)
 
     # Define consistent color palette that includes all variants
     palette_dict = define_consistent_palette(accession_data_common, accession)
@@ -295,7 +538,7 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
         # Extract data for compounds in cluster
         data_cluster = accession_data_common[accession_data_common['connectivity'].isin(cluster_connectivity)]
         # Create directory for cluster
-        cluster_dir = os.path.join(output_dir, accession, f'cluster_{i}')
+        cluster_dir = os.path.join(output_dir, accession, dataset_alias, f'cluster_{i}')
         if not os.path.exists(cluster_dir):
             os.mkdir(cluster_dir)
         # Plot distribution
@@ -304,23 +547,159 @@ def plot_bioactivity_distribution_cluster_subset(accession: str, annotation_roun
                                               plot_mean=True, color_palette=palette_dict, save_dataset=False,
                                               output_dir=cluster_dir, replot=replot)
 
+def annotate_cluster_compounds(connectivity_cluster_dict: dict,
+                                  mapped_compounds: pd.DataFrame):
+    """
+    Annotate compounds in clusters with additional information for further analysis
+    :param connectivity_cluster_dict: Dictionary with connectivity and cluster assignment
+    :param mapped_compounds: Compound information dataframe
+    :return: Compound information dataframe for compounds in clusters
+    """
+    # Extract compounds in dictionary from dataframe
+    cluster_df = mapped_compounds[mapped_compounds['connectivity'].isin(connectivity_cluster_dict.keys())]
 
-if __name__ == '__main__':
-    annotation_round = 1
-    output_dir = f'C:\\Users\\gorostiolam\\Documents\\Gorostiola Gonzalez, ' \
-             f'Marina\\PROJECTS\\6_Mutants_PCM\\DATA\\2_Analysis\\1_mutant_statistics\\4_compound_clusters\\round' \
-                 f'_{annotation_round}'
+    # Add cluster column by mapping dictionary on connectivity
+    cluster_df['cluster'] = cluster_df['connectivity'].map(connectivity_cluster_dict)
+    cluster_df.sort_values('connectivity', inplace=True)
 
-    # Plot distributions of bioactivities in most populated Butina clusters for targets with > 90 compounds in common
-    # subsets
-    for accession in ['P00533', 'Q72547', 'O75874','O60885','P00519','P07949','P10721','P13922','P15056','P22607',
-    'P30613','P36888','Q15910','Q5S007','Q9UM73']:
-        plot_bioactivity_distribution_cluster_subset(accession, annotation_round, output_dir)
+    # Keep one row per connectivity
+    cluster_df_unique = group_unique_df(cluster_df, 'connectivity')
 
-    # Plot distribution of bioactivities in most populated Butina clusters for targets with => 50% mutant bioactivity
-    # ratio
-    for accession in ['P15056', 'P23443', 'O75874', 'P13922', 'P30613', 'P01116', 'Q6P988', 'Q86WV6', 'P48735',
-                      'Q9P2K8', 'P21146', 'P48065', 'Q81R22', 'P07753', 'Q62120', 'Q15022', 'C1KIQ2', 'P36873',
-                      'Q5NGQ3', 'Q9QUR6', 'D5F1R0', 'P02511', 'P11678', 'P0DOF9', 'P56690', 'Q05320', 'P13738',
-                      'Q9NZN5', 'P15682', 'Q9NPD8']:
-        plot_bioactivity_distribution_cluster_subset(accession, annotation_round, output_dir)
+    return cluster_df_unique
+
+def check_moa(x, accession):
+    """
+    Check whether a compound is linked to the accession in its MOA or otherwise if its child is
+    :param x: row
+    :param accession: accession of interest
+    """
+    parent_moa = False
+    child_moa = False
+    if accession in str(x['accession']):
+        parent_moa = True
+    elif accession in str(x['accession_child']):
+        child_moa = True
+
+    return parent_moa, child_moa
+
+def check_mutation(x):
+    """
+    Check whether a compound is linked to a mutation in its MOA or otherwise if its child is
+    :param x: row
+    :param accession: accession of interest
+    """
+    parent_mutation = False
+    child_mutation = False
+    if not pd.isna(x['mutation']):
+        parent_mutation = True
+    elif not pd.isna(x['mutation_child']):
+        child_mutation = True
+
+    return parent_mutation, child_mutation
+
+def check_approval(x):
+    """
+    Check whether a compound is approved or otherwise if its child is approved
+    :param x: row
+    """
+    approved = False
+    approved_child = False
+
+    max_phase_connectivity = max([int(i) for i in str(x['max_phase']).split(';')])
+    try:
+        max_phase_connectivity_child = max([int(i) for i in str(x['max_phase_child']).split(';')])
+    except ValueError:  # Some compounds don't have a child defined and will throw an error
+        max_phase_connectivity_child = 0
+
+    if max_phase_connectivity == 4:
+        approved = True
+    elif max_phase_connectivity_child == 4:
+        approved_child = True
+    return approved, approved_child
+def explore_cluster_compound_info(cluster_df_unique: pd.DataFrame,
+                                  accession: str,
+                                  analysis_type: str,
+                                  output_type: str = 'stats',
+                                  sort: str = 'cluster'):
+    """
+    Explore compound information in clusters
+    :param cluster_df_unique: dataframe with compound information for compounds in clusters
+    :param accession: Uniprot accession code of interest
+    :param analysis_type: Type of analysis to perform. Options include 'MOA' and 'approval'
+    :param output_type: Type of output to return. Options include 'stats' (return statistics dataframe) and 'df'
+    (return dataframe with compound information)
+    :return: statistics dataframe with cluster information
+    """
+    if analysis_type == 'MOA':
+        # Check if compounds are linked to the analysis accession in their MOA
+        cluster_df_unique[[f'{accession}_MOA', f'{accession}_MOA_child']] = cluster_df_unique.apply(
+            lambda x: check_moa(x, accession=accession), axis=1, result_type='expand')
+
+        # Compute statistics
+        stats = cluster_df_unique.groupby('cluster').agg({f'{accession}_MOA':np.sum,
+                                                          f'{accession}_MOA_child':np.sum})
+        # Add column with sum of MOA and MOA child
+        stats[f'{accession}_MOA_total'] = stats[f'{accession}_MOA'] + stats[f'{accession}_MOA_child']
+
+        # Extract df with compounds that have the accession in their MOA
+        df = cluster_df_unique[(cluster_df_unique[f'{accession}_MOA'] == True) | (cluster_df_unique[f'{accession}_MOA_child'] == True)]
+        df = df[['connectivity','pref_name','accession','accession_child', 'mutation','max_phase','cluster']]
+
+    elif analysis_type == 'mutation':
+        # Check if compounds are linked to the analysis accession in their MOA
+        cluster_df_unique[[f'{accession}_mutation', f'{accession}_mutation_child']] = cluster_df_unique.apply(
+            lambda x: check_mutation(x), axis=1, result_type='expand')
+
+        # Compute statistics
+        stats = cluster_df_unique.groupby('cluster').agg({f'{accession}_mutation':np.sum,
+                                                          f'{accession}_mutation_child':np.sum})
+        # Add column with sum of MOA and MOA child
+        stats[f'{accession}_mutation_total'] = stats[f'{accession}_mutation'] + stats[f'{accession}_mutation_child']
+
+        # Extract df with compounds that have a mutation in their MOA
+        df = cluster_df_unique[(cluster_df_unique[f'{accession}_mutation'] == True) | (cluster_df_unique[f'{accession}_mutation_child'] == True)]
+        df = df[['connectivity', 'pref_name', 'accession', 'mutation', 'mutation_child', 'max_phase', 'cluster']]
+
+    elif analysis_type == 'approval':
+        # Check if compounds are approved drugs
+        cluster_df_unique[['approved', 'approved_child']] = cluster_df_unique.apply(lambda x: check_approval(x), axis=1,
+                                                                                    result_type='expand')
+        # Compute statistics
+        stats = cluster_df_unique.groupby('cluster').agg({'approved':np.sum, 'approved_child':np.sum})
+        # Add column with sum of approved and approved child
+        stats['approved_total'] = stats['approved'] + stats['approved_child']
+
+        # Extract df with compounds that are approved drugs
+        df = cluster_df_unique[(cluster_df_unique['approved'] == True) | (cluster_df_unique['approved_child'] == True)]
+        df = df[['connectivity', 'pref_name', 'accession', 'mutation', 'max_phase', 'max_phase_child', 'cluster']]
+
+    if output_type == 'stats':
+        if sort == 'cluster':
+            satisfying_condition =['parent', len(stats[stats[stats.columns[0]] > 0]), (len(stats[stats[stats.columns[0]]
+                                                                                                 > 0]) / len(stats))*100]
+            pass
+        elif sort == 'parent':
+            satisfying_condition = ['parent', len(stats[stats[stats.columns[0]] > 0]),
+                                    len(stats[stats[stats.columns[0]] > 0]) / len(stats)]
+            # Sort in descending order of values in the first column
+            stats.sort_values(stats.columns[0], ascending=False, inplace=True)
+
+        elif sort == 'child':
+            satisfying_condition = ['child', len(stats[stats[stats.columns[1]] > 0]),
+                                    len(stats[stats[stats.columns[1]] > 0]) / len(stats)]
+            # Sort in descending order of values in the second column
+            stats.sort_values(stats.columns[1], ascending=False, inplace=True)
+        elif sort == 'both':
+            satisfying_condition = ['parent or child', len(stats[stats[stats.columns[2]] > 0]),
+                                    len(stats[stats[stats.columns[2]] > 0]) / len(stats)]
+            # Sort in descending order of values in the third column and then in descending order of values in the first
+            # column
+            stats.sort_values([stats.columns[2], stats.columns[0]], ascending=False, inplace=True)
+
+        # Print how many clusters have at least one compound that satisfies the condition
+        print(f'Number of clusters with at least one ({satisfying_condition[0]}) compound satisfying the condition:'
+              f' {satisfying_condition[1]} ({satisfying_condition[2]:.2f}%)')
+
+        return stats
+    elif output_type == 'df':
+        return df.sort_values(by='cluster',ascending=True)

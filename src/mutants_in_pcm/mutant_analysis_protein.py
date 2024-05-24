@@ -12,6 +12,9 @@ from pypdb import get_info
 import Bio
 from Bio.PDB import PDBList
 import json
+import seaborn as sns
+import pandas as pd
+from matplotlib.colors import LinearSegmentedColormap
 
 def map_accession_to_pdb(accession:str):
     """
@@ -295,4 +298,53 @@ def calculate_average_residue_distance_to_ligand(accession:str, resn:list, commo
     else:
         return accession_average_dist
 
+
+def plot_distance_pdb_distribution(distance_dir, accession, residue_list, full_df=True):
+    """
+    Plot distribution of distances between ligand and protein residues for a Uniprot accession
+    across all PDB structures analyzed.
+    :param distance_dir: directory where distance json files are stored
+    :param accession: UniProt accession code
+    :param residue_list: list of residues to plot
+    :param full_df: whether to return full dataframe or only rows with all distances > 0
+    :return: dataframe with distances, figure
+    """
+    # open distance dictionary from file
+    with open(os.path.join(distance_dir, f'ligand_protein_distances_{accession}.json'), 'r') as f:
+        distance_accession = json.load(f)
+
+    # create dataframe from dictionary
+    residue_columns = [f'dist_{residue}' for residue in residue_list]
+    columns = ['pdb', 'ligand'] + residue_columns
+
+    dict_to_df = {}
+    for pdb in distance_accession.keys():
+        if pdb != f'{accession}_average':
+            distance_list = []
+            for residue in residue_list:
+                try:
+                    distance_list.append(distance_accession[pdb]['distance'][residue])
+                except:
+                    distance_list.append(0)
+            dict_to_df[f'{pdb}_{distance_accession[pdb]["ligand"]}'] = [pdb, distance_accession[pdb][
+                'ligand']] + distance_list
+        else:
+            dict_to_df[pdb] = [pdb, 'average'] + [distance_accession[pdb]['distance'][residue] for residue in
+                                                  residue_list]
+
+    df_distance_accession = pd.DataFrame.from_dict(dict_to_df, orient='index', columns=columns)
+    if not full_df:
+        # subset dataframe to only include rows with all distances > 0
+        df_distance_accession = df_distance_accession[(df_distance_accession[residue_columns] > 0).all(axis=1)]
+
+    # plot distribution of distances
+    sns.set(font_scale=1)
+    g = sns.clustermap(df_distance_accession.iloc[:, 2:].astype(float), cmap='viridis', figsize=(10, 20),
+                       col_cluster=False,
+                       linewidths=1, linecolor='black', cbar_kws={"shrink": 0.5},
+                       mask=(df_distance_accession.iloc[:, 2:] == 0))  # masking zeroes
+    g.fig.subplots_adjust(right=0.7)
+    g.ax_cbar.set_position((0.8, .2, .03, .4))
+
+    return df_distance_accession
 

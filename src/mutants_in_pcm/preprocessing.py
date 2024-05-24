@@ -312,6 +312,3 @@ def merge_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papy
         agg_activity_data = pd.read_csv(file_name, sep='\t')
 
     return agg_activity_data
-
-if __name__ == "__main__":
-    merge_chembl_papyrus_mutants('31', '05.5', 'nostereo', 1_000_000, annotation_round=1, predefined_variants=False)
