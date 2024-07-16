@@ -19,20 +19,26 @@ from papyrus_scripts.utils import IO as papyrusIO
 from .data_path import get_data_path
 
 
-def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: str = None):
+def obtain_chembl_data(chembl_version: str,
+                       chunksize: int = None,
+                       data_folder: str = None,
+                       filter_activity: bool = False):
     """Obtain assay descriptions and bioactivities annotated for mutants from ChEMBL using chembl-downloader.
 
     :param chembl_version: version of chembl to work with
     :param chunksize: size of chunks of data to be used (default: None)
-    :param data_folder: path to the folder in which the ChEMBL
-    SQLite database is located or will be downloaded (default:
+    :param data_folder: path to the folder in which the ChEMBL SQLite database is located or will be downloaded (default:
     pystow's default directory)
+    :param filter_activity: whether to filter out activities with standard_relation different from '='
     """
     if data_folder is not None:
         os.environ['PYSTOW_HOME'] = data_folder
 
     data_dir = get_data_path()
-    chembl_file = os.path.join(data_dir, f'chembl{chembl_version}_data.csv')
+    if filter_activity:
+        chembl_file = os.path.join(data_dir, f'chembl{chembl_version}_data_filtered.csv')
+    else:
+        chembl_file = os.path.join(data_dir, f'chembl{chembl_version}_data.csv')
     if not os.path.isfile(chembl_file):
 
         query = """
@@ -57,9 +63,10 @@ def obtain_chembl_data(chembl_version: str, chunksize: int = None, data_folder: 
                     ON target_dictionary.tid = target_components.tid
                 INNER JOIN component_sequences
                     ON target_components.component_id = component_sequences.component_id
-            WHERE
-                activities.standard_relation = '='
             """
+
+        if filter_activity:
+            query += "WHERE activities.standard_relation = '='"
 
         chembl_assays = chembl_downloader.query(query, version=chembl_version,
                                               prefix=['mutants-in-pcm', 'chembl'])
