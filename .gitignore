@@ -138,3 +138,8 @@ dmypy.json
 .pyre/
 /analysis/1_mutant_statistics/
 /analysis/0_annotation_analysis/
+/analysis/explore_analysis_type_organism_values.ipynb
+/analysis/explore_allosteric_clustering.py
+/analysis/annotation_analysis_no_variants.py
+/analysis/mutant_analysis_family_individual_check.ipynb
+/analysis/mutant_analysis_multiple_substitutions.ipynb
