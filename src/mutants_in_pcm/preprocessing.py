@@ -43,7 +43,7 @@ def obtain_chembl_data(chembl_version: str,
 
         query = """
             SELECT assays.description,assays.assay_id,assays.variant_id,assays.chembl_id as 'assay_chembl_id',
-                assays.assay_organism,assays.confidence_score,
+                assays.assay_organism,assays.confidence_score,assays.assay_cell_type,
                 docs.year,docs.abstract,
                 variant_sequences.mutation,
                 activities.activity_id,activities.pchembl_value,activities.standard_type,activities.activity_comment,
