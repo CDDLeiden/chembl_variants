@@ -6,6 +6,7 @@ import json
 import math
 import os
 from statistics import mean
+from collections import Counter
 
 import pandas as pd
 import numpy as np
@@ -476,62 +477,190 @@ def keep_chembl_defined_activity(chembl_df: pd.DataFrame):
                     ['assay_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id', 'canonical_smiles']
     :return:
     """
+    # Simplify activity comments
     chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: str(x).lower())
     chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(lambda x: math.nan if x == 'nan' else x)
-    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(
+    # Simplify available activity comments to binary labels
+    chembl_df['activity_comment_binary'] = chembl_df['activity_comment'].apply(
         lambda x: 'active' if x in ['highly active', 'slightly active', 'weakly active', 'partially active'] else x)
-    chembl_df['activity_comment'] = chembl_df['activity_comment'].apply(
+    chembl_df['activity_comment_binary'] = chembl_df['activity_comment'].apply(
         lambda x: 'inactive' if x in ['not active'] else x)
 
-    # Keep entries with no negative activity comments
-    list_exclude = ['inconclusive', 'unspecified', 'Indeterminate', 'Ineffective', 'Insoluble', 'Insufficient',
-                    'Lack of solubility', 'Not Determined', 'ND(Insoluble)', 'tde', 'not tested', 'uncertain',
-                    'No compound available',
-                    'No compound detectable', 'No data', 'Non valid test', 'Not assayed', 'OUTCOME = Not detected',
-                    'Precipitate', 'Precipitated', 'Precipitates under the conditions of the study', 'Precipitation',
-                    'Qualitative measurement', 'Too insoluble', 'Unable to be measured', 'Unable to calculate']
+    # Keep entries with defined pchembl_value or binary activity labels
+    chembl_df = chembl_df[(chembl_df['pchembl_value'].notna()) | (chembl_df['activity_comment'].notna())]
 
-    chembl_df_good_activity = chembl_df[~chembl_df['activity_comment'].isin(list_exclude)]
+    return chembl_df
 
-    # Keep entries that are good for regression or classification tasks
-    chembl_df_defined_activity = chembl_df_good_activity[
-        (chembl_df_good_activity['pchembl_value'].notna()) | (chembl_df_good_activity['activity_comment']
-                                                              .isin(['active', 'inactive']))]
-
-    return chembl_df_defined_activity
-
-def keep_highest_quality_activity(data: pd.DataFrame, target_col: str, comp_col: str, cont_col: str, bin_col: str):
+def filter_activity_comment(chembl_df: pd.DataFrame, activity_threshold: float = 6.0):
     """
-    If a target - compound pair has both continue and binary activity data defined, keep only continue data (pchembl_value)
+    Remove entries with negative or mismatching activity comments.
+    :param chembl_df: DataFrame with ChEMBL bioactivity data of interest. It must contain columns of interest:
+                    ['assay_id', 'accession', 'pchembl_value', 'activity_comment', 'validity_comment',
+                    'standard_relationship','chembl_id', 'canonical_smiles']
+    :param activity_threshold: Threshold for activity classification. Default is 6.0
+    :return:
+    """
+    # Keep only defined standard relationships
+    chembl_df = chembl_df[chembl_df['standard_relation'].isin(['=', '>', '>=', '<', '<='])]
+
+    # Keep entries with no negative activity comments
+    list_exclude = ['inconclusive', 'unspecified', 'indeterminate', 'ineffective', 'insoluble', 'insufficient',
+                    'lack of solubility', 'not determined', 'nd(insoluble)', 'tde', 'not tested', 'uncertain',
+                    'no compound available',
+                    'no compound detectable', 'no data', 'non valid test', 'not assayed', 'outcome = not detected',
+                    'precipitate', 'precipitated', 'precipitates under the conditions of the study', 'precipitation',
+                    'qualitative measurement', 'too insoluble', 'unable to be measured', 'unable to calculate']
+
+    chembl_df = chembl_df[~chembl_df['activity_comment'].isin(list_exclude)]
+
+    # Remove entries with mismatched activity and activity comment
+    def check_activity(row, activity_threshold):
+        if row['activity_comment'] in ['active', 'inactive']:
+            if (row['pchembl_value'] < activity_threshold) and (row['activity_comment'] == 'active'):
+                return False
+            elif (row['pchembl_value'] >= activity_threshold) and (row['activity_comment'] == 'inactive'):
+                return False
+            else:
+                return True
+        else:
+            return True
+
+    chembl_df['valid_activity'] = chembl_df.apply(check_activity, args=(activity_threshold,), axis=1)
+    chembl_df = chembl_df[chembl_df['valid_activity']]
+    # drop validity column
+    chembl_df.drop('valid_activity', axis=1, inplace=True)
+
+    return chembl_df
+
+def filter_validity_comment(chembl_df: pd.DataFrame):
+    """
+    Remove entries with negative validity comments.
+    :param chembl_df: DataFrame with ChEMBL bioactivity data of interest. It must contain columns of interest:
+                    ['assay_id', 'accession', 'pchembl_value', 'activity_comment', 'validity_comment',
+                    'standard_relationship','chembl_id', 'canonical_smiles']
+    :return:
+    """
+    # Remove entries with negative validity comments
+    list_exclude = ['Potential missing data', 'Potential author error', 'Potential transcription error',
+                    'Outside typical range', 'Non-standard unit for type', 'Author confirmed error']
+    chembl_df = chembl_df[~chembl_df['data_validity_comment'].isin(list_exclude)]
+
+    return chembl_df
+
+
+def keep_highest_quality_activity(data: pd.DataFrame, target_col: str, comp_col: str, cont_col: str, bin_col: str,
+                                  activity_threshold: float = 6.0):
+    """
+    Aggregate activity data for the same target-compound pair by calculating the mean pchembl_value. Keep only the
+    highest quality activity data for each target-compound pair.
     :param data: DataFrame with bioactivity data
     :param target_col: Name of the column with the target identifier (e.g. 'accession', or 'target_id')
     :param comp_col: Name of the column with the compound identifier (e.g. 'chembl_id', or 'CID')
     :param cont_col: Name of the column with continous activity data (e.g. 'pchembl_value')
-    :param bin_col: Name of the column with binary activity data (e.g. 'activity_comment')
+    :param bin_col: Name of the column with binary activity data (e.g. 'activity_comment_binary')
+    :param activity_threshold: Threshold for activity classification. Default is 6.0
     :return:
     """
-    # Remove binary activity label if continuous label is defined in the same activity entry
-    data[bin_col] = data.apply(lambda x: x[bin_col] if math.isnan(x[cont_col]) else math.nan, axis=1)
-
-    # If continuous activity is available for a target-compound pair, remove all binary activity labels
+    # Group data by target-compound pair
     data_grouped = data.groupby([target_col,comp_col]).agg(lambda x: list(x))
-    data_grouped[bin_col] = data_grouped.apply(lambda x: [math.nan for j in x[bin_col]] if (
-                (any([math.isnan(i) for i in x[cont_col]])) and not (
-            all([math.isnan(i) for i in x[cont_col]]))) else x[bin_col], axis=1)
 
-    # Calculate mean or consensus binary activity
-    data_grouped[f'{cont_col}_Mean'] = data_grouped.apply(
-        lambda x: mean([i for i in x[cont_col] if not math.isnan(i)]) if not (
-            all([math.isnan(i) for i in x[cont_col]])) else math.nan, axis=1)
-    data_grouped['Activity_class'] = data_grouped.apply(
-        lambda x: max(set(x[bin_col]), key=x[bin_col].count), axis=1)
+    # Calculate mean continuous activity and consensus binary activity for the highest confidence score available
+    def calculate_consensus_high_quality_activity(x):
+        # if there are different confidence scores, keep only the highest ones
+        # confidence order: 9 > 7 > 8 > 6 > 5 > 4 > 3 > 2 > 1
+        x_high = x.copy(deep=True)
+        x_high['confidence_score'] = [8 if i == 7 else 7 if i == 8 else i for i in x_high['confidence_score']]
+        if len(set(x['confidence_score'])) > 1:
+            # keep only activity values corresponding to the highest confidence score
+            # continuous activity
+            x_high[cont_col] = [x_high[cont_col][i] for i in range(len(x_high[cont_col]))
+                                if x_high['confidence_score'][i] == max(x_high['confidence_score'])]
+            # binary activity
+            x_high[bin_col] = [x_high[bin_col][i] for i in range(len(x_high[bin_col]))
+                               if x_high['confidence_score'][i] == max(x_high['confidence_score'])]
+        #TODO: add column with % of data used for the mean and consensus activity
+        # calculate mean value of activity
+        mean_value = mean([i for i in x_high[cont_col] if not math.isnan(i)]) if not \
+            (all([math.isnan(i) for i in x_high[cont_col]])) else math.nan
+
+        # calculate consensus activity. If there are different activities, keep the most frequent one, nan does not take
+        # preference over any other activity
+        filtered_list = [i for i in x_high[bin_col] if not (isinstance(i, float) and math.isnan(i))]
+        if not filtered_list:
+            most_common = math.nan  # Handle the case where the filtered list is empty
+        else:
+            # Count occurrences of each string
+            counter = Counter(filtered_list)
+            # Get the most common string
+            most_common = counter.most_common(1)[0][0]
+
+        # Calculate the percentage of data used for the mean and consensus activity
+        percentage_max_confidence = len(x_high[cont_col])/len(x[cont_col])
+        percentage_mean = len([i for i in x_high[cont_col] if not (isinstance(i, float) and math.isnan(i))])/len(x[cont_col])
+        percentage_consensus = len(filtered_list)/len(x[bin_col])
+
+        # Get maximum confidence score for the activity
+        max_confidence = max(x_high['confidence_score'])
+        if max_confidence == 8:
+            max_confidence = 7
+        elif max_confidence == 7:
+            max_confidence = 8
+
+        return mean_value, percentage_mean, most_common, percentage_consensus, max_confidence, percentage_max_confidence
+
+    data_grouped[f'{cont_col}_Mean'], data_grouped['percentage_mean'], data_grouped[f'{bin_col}_Consensus'],  \
+    data_grouped['percentage_consensus'], data_grouped['max_confidence'], data_grouped['percentage_max_confidence'] = (
+        zip(
+        *data_grouped.apply(calculate_consensus_high_quality_activity, axis=1)))
+
+    # Check if mean pchembl_value matches consensus binary activity, else filter out
+    # Note that if the binary activity was defined for a lower confidence score, it was not considered to calculate
+    # the consensus binary label
+    def check_activity(row, activity_threshold):
+        if row[f'{bin_col}_Consensus'] in ['active', 'inactive']:
+            if (row['pchembl_value_Mean'] < activity_threshold) and (row[f'{bin_col}_Consensus'] == 'active'):
+                return False
+            elif (row['pchembl_value_Mean'] >= activity_threshold) and (row[f'{bin_col}_Consensus'] == 'inactive'):
+                return False
+            else:
+                return True
+        else:
+            return True
+
+    data_grouped['valid_activity'] = data_grouped.apply(check_activity, args=(activity_threshold,), axis=1)
+    data_grouped = data_grouped[data_grouped['valid_activity']]
+    # drop validity column
+    data_grouped.drop('valid_activity', axis=1, inplace=True)
 
     data_high_quality = data_grouped.reset_index()
 
     return data_high_quality
 
+def define_binary_labels(chembl_df: pd.DataFrame, cont_col: str, bin_col: str, activity_threshold: float = 6.0):
+    """
+    Define binary labels for classification based on a certain activity threshold.
+    :param chembl_df: DataFrame with ChEMBL bioactivity data of interest. It must contain columns of interest:
+                    ['assay_id', 'accession', 'pchembl_value', 'activity_comment', 'validity_comment',
+                    'standard_relationship','chembl_id', 'canonical_smiles']
+    :param cont_col: Name of the column with continuous activity data (e.g. 'pchembl_value')
+    :param bin_col: Name of the column with binary activity data (e.g. 'activity_comment_binary')
+    :param activity_threshold: Threshold for activity classification. Default is 6.0
+    """
+    # Convert activity values to binary labels if they dont exist
+    def convert_activity(row, activity_threshold):
+        if row[f'{bin_col}_Consensus'] in ['active', 'inactive']:
+            return row[f'{bin_col}_Consensus']
+        else:
+            if row[f'{cont_col}_Mean'] >= activity_threshold:
+                return 'active'
+            else:
+                return 'inactive'
 
-def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_annotated: pd.DataFrame):
+    chembl_df[f'{bin_col}_Consensus'] = chembl_df.apply(convert_activity, args=(activity_threshold,), axis=1)
+
+    return chembl_df
+
+def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_annotated: pd.DataFrame, activity_threshold: float = 6.0):
     """
     Join mutation annotations to dataframe with ChEMBL bioactivity for modelling. Aggregate activity values for the same
     chembl_id-target_id pair by calculating the mean pchembl_value.
@@ -539,14 +668,13 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_annotated: pd.Data
                     ['assay_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id', 'canonical_smiles']
     :param assays_df_annotated:DataFrame with annotated and validated mutations from assay descriptions. Must contain:
                                 ['assay_id', 'accession', 'target_id', 'sequence']
+    :param activity_threshold: Threshold for activity classification. Default is 6.0
     :return: DataFrame with one row per chembl_id-target_id pair with an aggregated pchembl_value_Mean
     """
     # Mutate sequences based on extracted mutations
     assays_df_annotated = mutate_sequence(assays_df_annotated, 'sequence', 'target_id')
 
     # Keep columns of interest before joining dataframes
-    chembl_df = chembl_df[['assay_id', 'activity_id', 'accession', 'pchembl_value', 'activity_comment', 'chembl_id',
-                           'canonical_smiles', 'mutation', 'year']]
     assays_df_annotated = assays_df_annotated[['assay_id', 'accession', 'target_id', 'sequence']]
 
     # Keep activity pair if pchembl value is defined or if an activity label is defined
@@ -555,8 +683,19 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_annotated: pd.Data
     # Map mutations to bioactivity entries based on assay_id and accession
     chembl_mutations_df = pd.merge(chembl_df_activity, assays_df_annotated, how='left', on=['assay_id', 'accession'])
 
-    # Keep only assays with highest activity data quality
-    chembl_bioactivity_df = keep_highest_quality_activity(chembl_mutations_df, 'target_id','chembl_id', 'pchembl_value', 'activity_comment')
+    # Filter out activities with negative activity_comment or validity_comment
+    chembl_mutations_df = filter_activity_comment(chembl_mutations_df, activity_threshold=activity_threshold)
+    chembl_mutations_df = filter_validity_comment(chembl_mutations_df)
+
+    # Group activity per unique target_id-chembl_id pair and calculate mean and consensus activity for highest quality
+    # data available
+    chembl_bioactivity_df = keep_highest_quality_activity(chembl_mutations_df, 'target_id','chembl_id',
+                                                          'pchembl_value', 'activity_comment_binary',
+                                                          activity_threshold=activity_threshold)
+
+    # Define binary labels for classification based on a certain activity threshold
+    chembl_bioactivity_df = define_binary_labels(chembl_bioactivity_df, 'pchembl_value', 'activity_comment_binary',
+                                                    activity_threshold=activity_threshold)
 
     # Keep only first item in grouped columns that have the same value
     for col in ['accession','canonical_smiles','sequence','mutation','year']:
@@ -565,12 +704,13 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_annotated: pd.Data
     return chembl_bioactivity_df
 
 
-def chembl_annotation(chembl_version: str, annotation_round:str):
+def chembl_annotation(chembl_version: str, annotation_round:str, filter_activity: bool = False, activity_threshold: float = 6.0):
     """
     Obtain ChEMBL bioactivity data and annotate for validated mutants. If multiple assays are available per mutant-compound pair,
     calculate mean pchembl value.
     :param chembl_version: Version of ChEMBL to obtain data from
     :param annotation_round: round of annotation following further curation
+    :param filter_activity: whether to filter out activities with standard_relation different from '='
     :return: pd.DataFrame with one entry per target_id (mutant) - chembl_id (compound) with mean pchembl value
     """
     data_dir = get_data_path()
@@ -578,7 +718,7 @@ def chembl_annotation(chembl_version: str, annotation_round:str):
 
     if not os.path.isfile(chembl_annotation_file):
         # Get chembl data
-        chembl_data = obtain_chembl_data(chembl_version=chembl_version)
+        chembl_data = obtain_chembl_data(chembl_version=chembl_version, filter_activity=filter_activity)
         # In first round, annotate assays from scratch automatically
         if annotation_round == 1:
             chembl_assays = filter_assay_data(chembl_data)
@@ -592,9 +732,12 @@ def chembl_annotation(chembl_version: str, annotation_round:str):
             chembl_assays_annotated = manual_reannotation(
                 chembl_version, annotation_round,correct_false_positives=True, correct_false_negatives=True)
             chembl_assays_annotated = update_papyrus_protein_type(chembl_assays_annotated)
+        else:
+            raise TypeError('Annotation round must be at least 1')
 
         # Map annotated mutations in assays to bioactivity data
-        chembl_bioactivity_dataset = map_activity_mutations(chembl_data, chembl_assays_annotated)
+        chembl_bioactivity_dataset = map_activity_mutations(chembl_data, chembl_assays_annotated,
+                                                            activity_threshold=activity_threshold)
         chembl_bioactivity_dataset.to_csv(chembl_annotation_file, sep='\t', index=False)
 
     else:

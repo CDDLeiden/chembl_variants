@@ -43,10 +43,11 @@ def obtain_chembl_data(chembl_version: str,
 
         query = """
             SELECT assays.description,assays.assay_id,assays.variant_id,assays.chembl_id as 'assay_chembl_id',
-                assays.assay_organism,
+                assays.assay_organism,assays.confidence_score,
                 docs.year,docs.abstract,
                 variant_sequences.mutation,
                 activities.activity_id,activities.pchembl_value,activities.standard_type,activities.activity_comment,
+                activities.data_validity_comment,activities.standard_relation,
                 molecule_dictionary.chembl_id,compound_structures.canonical_smiles,
                 component_sequences.accession,component_sequences.sequence,component_sequences.organism
             FROM assays
@@ -177,7 +178,8 @@ def _chunked_keep_papyrus_mutants(data: Union[PandasTextFileReader, Iterator], s
 
 
 def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int,
-                                   annotation_round:int, predefined_variants: bool = False):
+                                   annotation_round:int, predefined_variants: bool = False, filter_activity: bool = False,
+                                   activity_threshold: float = 6.0, filter_max_confidence: int = 0):
     """
     Combine datasets with ChEMBL and Papyrus mutants. Include also WT data for targets with at least one variant defined.
     Filter out only targets with no variants defined.
@@ -187,6 +189,10 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
     :param chunksize: number of rows to read at a time
     :param annotation_round: round of annotation following further curation
     :param predefined_variants: whether to use ChEMBL pre-defined variants
+    :param filter_activity: whether to filter out activities with standard_relation different from '=' directly in
+            the chembl query
+    :param activity_threshold: threshold to assign binary labels to bioactivities
+    :param filter_max_confidence: filter out activities with maximum confidence score lower than this value
     """
     data_dir = get_data_path()
     if predefined_variants:
@@ -199,11 +205,15 @@ def combine_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, pa
     if not os.path.exists(file_name):
         from .annotation import chembl_annotation
         # Get ChEMBL data and extract mutants
-        chembl_annotated = chembl_annotation(chembl_version, annotation_round)
+        chembl_annotated = chembl_annotation(chembl_version, annotation_round, filter_activity, activity_threshold)
         chembl_annotated['source'] = f'ChEMBL{chembl_version}'
+        # Keep only data with maximum confidence score higher than filter_max_confidence
+        chembl_annotated = chembl_annotated[chembl_annotated['max_confidence'] >= filter_max_confidence]
+        # Keep only data with annotated mutants
         chembl_with_mutants = _keep_targets_with_mutants(chembl_annotated, f'ChEMBL{chembl_version}', predefined_variants)
         # Rename columns so they match Papyrus
-        dict_rename = {'chembl_id':'CID','assay_id':'AID','canonical_smiles':'SMILES','year':'Year'}
+        dict_rename = {'chembl_id':'CID','assay_id':'AID','canonical_smiles':'SMILES','year':'Year',
+                       'activity_comment_binary_Consensus':'Activity_class'}
         chembl_with_mutants.rename(dict_rename, axis=1, inplace=True)
         # Add connectivity ID to identify compounds
         PandasTools.AddMoleculeColumnToFrame(chembl_with_mutants, 'SMILES', 'Molecule', includeFingerprints=False)
@@ -285,7 +295,8 @@ def calculate_mean_activity_chembl_papyrus(data: pd.DataFrame):
     return agg_activity_data
 
 def merge_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papyrus_flavor: str, chunksize:int,
-                                 annotation_round: int,predefined_variants: bool = False):
+                                 annotation_round: int,predefined_variants: bool = False, filter_activity: bool = False,
+                                 activity_threshold: float = 6.0, filter_max_confidence: int = 0):
     """
     Create a dataset with targets with at least one annotated variant from ChEMBL and Papyrus. Merge datasets for
     connectivity-target_id pairs if data available from both sources.
@@ -295,18 +306,24 @@ def merge_chembl_papyrus_mutants(chembl_version: str, papyrus_version: str, papy
     :param chunksize: number of rows to read at a time
     :param annotation_round: round of annotation following further curation
     :param predefined_variants: whether to use ChEMBL pre-defined variants
+    :param filter_activity: whether to filter out activities with standard_relation different from '=' directly in
+            the chembl query
+    :param activity_threshold: threshold to assign binary labels to bioactivities
+    :param filter_max_confidence: filter out activities with maximum confidence score lower than this value
     """
     data_dir = get_data_path()
     if predefined_variants:
         file_name = os.path.join(data_dir,f'merged_chembl{chembl_version}_papyrus{papyrus_version}' \
-                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}_conf{filter_max_confidence}.csv')
     else:
         file_name = os.path.join(data_dir,f'merged_chembl{chembl_version}-annotated_papyrus{papyrus_version}' \
-                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}.csv')
+                    f'{papyrus_flavor}_data_with_mutants_round{annotation_round}_conf{filter_max_confidence}.csv')
 
     if not os.path.exists(file_name):
         chembl_papyrus_with_mutants = combine_chembl_papyrus_mutants(chembl_version, papyrus_version, papyrus_flavor,
-                                                                     chunksize, annotation_round, predefined_variants)
+                                                                     chunksize, annotation_round, predefined_variants,
+                                                                     filter_activity, activity_threshold,
+                                                                     filter_max_confidence)
 
         agg_activity_data_not_annotated = calculate_mean_activity_chembl_papyrus(chembl_papyrus_with_mutants)
 
