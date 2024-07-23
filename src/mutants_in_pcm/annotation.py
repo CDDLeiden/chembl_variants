@@ -262,6 +262,11 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
     else:
         assays_df_validation2['seq_flags_fixed'] = assays_df_validation2['seq_flags']
 
+    # Force filtering out mutations of format 'M1X' in all assay/target pairs (M1X is a common false positive)
+    assays_df_validation2['seq_flags_fixed'] = \
+        assays_df_validation2.apply(lambda x: [n if not re.search('M1[A-Z]', i) else False
+                                               for n, i in zip(x['seq_flags_fixed'], x['aa_change_val1'])], axis=1)
+
     # Validation step 2: Filter out mutations where wild type amino acid does not match at the right location
     assays_df_validation2['aa_change_val2'] = \
         assays_df_validation2.apply(lambda x: [i for i, n in zip(x['aa_change_val1'], x['seq_flags_fixed'])
