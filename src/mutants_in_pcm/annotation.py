@@ -281,6 +281,43 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
 
     return assays_df_validated
 
+def annotate_deletions_insertions(assays_df: pd.DataFrame):
+    """
+    Annotate deletions and insertions in the 'del_flag' and 'ins_flag' columns based on the assay descriptions.
+    Manual curation was needed to define the exceptions and rescues for deletions and insertions.
+    :param assays_df: DataFrame containing assay descriptions in a column named 'description'
+    :return: the input DataFrame with two new columns: 'del_flag' and 'ins_flag' containing Booleans that define
+            whether a deletion or insertion was annotated in the assay description.
+    """
+    # instances of the word 'del' that should not be flagged as deletions
+    del_exceptions = ['delta|model|delfia|delphia|delivery|delivered|deliver|delayed|delay|deltorphin|mandelate'
+                      '|dell0|DEL method|hydroxymandelic|pdelight|laodelphax|deLys|RRRDEL|Brandel|DELT2|sandell'
+                      '|Heidelberg|guideline|ISDELMDATFADQEAKKK|KdELECT|deltrophin|delat4|DELT']
+
+    # flag all assays with 'del' in the description as long as the word matching is not one of the exceptions
+    def flag_del(row):
+        if re.search('del', row['description'], re.IGNORECASE):
+            if not any(re.search(exception, row['description'], re.IGNORECASE) for exception in del_exceptions):
+                return True
+        return False
+
+    assays_df['del_flag'] = assays_df.apply(flag_del, axis=1)
+
+    # instances of the word 'ins' that should be flagged as insertions
+    ins_include = ['1151Tins|1278ins|A763_Y764insFHEA|D770_N771insNPG|F594_R595ins|R595_E596ins|T1151ins'
+                   '|Y591_V592ins|insert']
+
+    # flag all assays with 'ins' in the description as long as the word matching is in the list of insertions
+    def flag_ins(row):
+        if re.search('ins', row['description'], re.IGNORECASE):
+            if any(re.search(insertion, row['description'], re.IGNORECASE) for insertion in ins_include):
+                return True
+        return False
+
+    assays_df['ins_flag'] = assays_df.apply(flag_ins, axis=1)
+
+    return assays_df
+
 
 def create_papyrus_columns(assays_df_validated: pd.DataFrame):
     """
@@ -301,14 +338,31 @@ def create_papyrus_columns(assays_df_validated: pd.DataFrame):
 
     assays_df_validated['mutants'] = assays_df_validated['mutants'].apply(lambda x: sorted(x, key=num_sort))
 
-    # Make target_id identifier
-    assays_df_validated['target_id'] = assays_df_validated.apply(
-        lambda x: f'{x["accession"]}_{"_".join(x["mutants"])}' if len(x["mutants"]) > 0 else f'{x["accession"]}_WT',
-        axis=1)
+    # Make target_id identifier and Protein_Type column
+    def integrate_alterations(row):
+        if (len(row["mutants"]) == 0) and not (row["del_flag"] or row["ins_flag"]):
+            target_id =  f'{row["accession"]}_WT'
+            protein_type = 'WT'
+        elif (len(row["mutants"]) == 0) and row["del_flag"]:
+            target_id = f'{row["accession"]}_DEL'
+            protein_type = 'DEL'
+        elif (len(row["mutants"]) == 0) and row["ins_flag"]:
+            target_id = f'{row["accession"]}_INS'
+            protein_type = 'INS'
+        elif (len(row["mutants"]) > 0) and row["del_flag"]:
+            target_id = f'{row["accession"]}_DEL_{"_".join(row["mutants"])}'
+            protein_type = f'DEL;{";".join(row["mutants"])}'
+        elif (len(row["mutants"]) > 0) and row["ins_flag"]:
+            target_id = f'{row["accession"]}_INS_{"_".join(row["mutants"])}'
+            protein_type = f'INS;{";".join(row["mutants"])}'
+        else:
+            target_id = f'{row["accession"]}_{"_".join(row["mutants"])}'
+            protein_type = ";".join(row["mutants"])
 
-    # Make Protein_Type column
-    assays_df_validated['Protein_Type'] = assays_df_validated.apply(
-        lambda x: ";".join(x["mutants"]) if len(x["mutants"]) > 0 else 'WT', axis=1)
+        return target_id, protein_type
+
+    assays_df_validated['target_id'], assays_df_validated['Protein_Type'] = zip(*assays_df_validated.apply(
+        integrate_alterations, axis=1))
 
     return assays_df_validated
 
