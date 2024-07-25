@@ -206,6 +206,10 @@ def filter_negative_annotations(assay_data: pd.DataFrame, undefined_mutations: b
     def check_original_valid(row):
         original_mutations = row['mutation'].split(',')
         valid_mutations = row['target_id'].split('_')[1:]
+        # strip possible spaces in the lists of mutations
+        original_mutations = [om.strip() for om in original_mutations]
+        valid_mutations = [vm.strip() for vm in valid_mutations]
+
         if not undefined_mutations:
             if valid_mutations == ['MUTANT']:
                 return True

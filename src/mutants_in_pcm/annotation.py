@@ -650,8 +650,7 @@ def keep_highest_quality_activity(data: pd.DataFrame, target_col: str, comp_col:
             # binary activity
             x_high[bin_col] = [x_high[bin_col][i] for i in range(len(x_high[bin_col]))
                                if x_high['confidence_score'][i] == max(x_high['confidence_score'])]
-        #TODO: add column with % of data used for the mean and consensus activity
-        # calculate mean value of activity
+
         mean_value = mean([i for i in x_high[cont_col] if not math.isnan(i)]) if not \
             (all([math.isnan(i) for i in x_high[cont_col]])) else math.nan
 
