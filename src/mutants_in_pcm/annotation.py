@@ -731,7 +731,8 @@ def define_binary_labels(chembl_df: pd.DataFrame, cont_col: str, bin_col: str, a
 
     return chembl_df
 
-def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_annotated: pd.DataFrame, activity_threshold: float = 6.0):
+def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_annotated: pd.DataFrame, activity_threshold: float =
+6.0):
     """
     Join mutation annotations to dataframe with ChEMBL bioactivity for modelling. Aggregate activity values for the same
     chembl_id-target_id pair by calculating the mean pchembl_value.
@@ -795,6 +796,7 @@ def chembl_annotation(chembl_version: str, annotation_round:str, filter_activity
             chembl_assays = filter_assay_data(chembl_data)
             chembl_assays_extracted = extract_aa_change(chembl_assays)
             chembl_assays_validated = validate_aa_change(chembl_assays_extracted, chembl_version=chembl_version)
+            chembl_assays_validated = annotate_deletions_insertions(chembl_assays_validated)
             chembl_assays_annotated = create_papyrus_columns(chembl_assays_validated)
             chembl_assays_annotated.to_csv(os.path.join(data_dir,f'chembl{chembl_version}_annotated_assays_round'
                                                                  f'{annotation_round}.csv'),sep='\t', index=False)
