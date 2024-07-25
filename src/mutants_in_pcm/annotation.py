@@ -37,11 +37,6 @@ def extract_aa_change(assays_df: pd.DataFrame):
     :param assays_df: DataFrame containing (ChEMBL) assay descriptions in a column named 'description'
     :return: the input DataFrame with a new column 'aa_change' with the potential amino acid changes extracted in a list
     """
-    # Extract aa_change in format W123M or Trp123Met
-    regex_expression = '[A-Z][a-z]{2,}\d+[A-Z][a-z]{2,}|[A-Z]\d+[A-Z]'
-    assays_df_extracted = assays_df.copy(deep=True)
-    assays_df_extracted['aa_change'] = assays_df_extracted.description.str.findall(regex_expression)
-
     # Define dictionary for three-letter aa code to one-letter aa code
     aas = {'Ala': 'A',
            'Gly': 'G',
@@ -71,15 +66,33 @@ def extract_aa_change(assays_df: pd.DataFrame):
            'Xle': 'J'  # Leucine or Isoleucine
            }
 
-    # Convert three-letter codes to one-letter codes
-    assays_df_extracted['aa_change'] = assays_df_extracted['aa_change'].map(lambda x: ','.join(x))
-    assays_df_extracted['aa_change'] = assays_df_extracted.aa_change.replace(aas, regex=True)
+    possible_strings = list(aas.keys()) + list(aas.values())
 
-    # Convert aa_change column back to list
-    assays_df_extracted['aa_change'] = assays_df_extracted['aa_change'].map(lambda x: x.split(sep=','))
+    # Regular expression pattern (case insensitive to account for formatting errors)
+    pattern = re.compile(rf"({'|'.join(possible_strings)})(\d+)({'|'.join(possible_strings)})", re.IGNORECASE)
 
-    # Remove wrongly assigned empty strings in amino acid lists
-    assays_df_extracted['aa_change'] = assays_df_extracted['aa_change'].apply(lambda x: [i for i in x if i != ""])
+    # Function to process the assay description
+    def process_description(description):
+        matches = pattern.findall(description)
+        processed_matches = []
+
+        for match in matches:
+            prefix, number, suffix = match
+            # Capitalize the first letter of each match
+            prefix = prefix.capitalize()
+            suffix = suffix.capitalize()
+            # Convert three-character strings to one-character using the mapping dictionary
+            prefix = aas.get(prefix, prefix)
+            suffix = aas.get(suffix, suffix)
+            # Combine the processed parts
+            processed_match = f"{prefix}{number}{suffix}"
+            processed_matches.append(processed_match)
+
+        return processed_matches
+
+    # Apply the function to the DataFrame
+    assays_df_extracted = assays_df.copy(deep=True)
+    assays_df_extracted['aa_change'] = assays_df_extracted['description'].apply(process_description)
 
     return assays_df_extracted
     
