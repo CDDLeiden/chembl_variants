@@ -524,7 +524,7 @@ def mutate_sequence(df: pd.DataFrame, sequence_col: str, target_id_col: str, rev
     def replace_aa(row):
         sequence = row[sequence_col]
         for mut in row[target_id_col].split('_')[1:]:
-            if (mut != 'WT') and (mut != 'MUTANT'):
+            if (mut != 'WT') and (mut != 'MUTANT') and (mut != 'INS') and (mut != 'DEL'):
                 aa_wt = mut[0]
                 aa_mut = mut[-1]
                 res = int(re.search('\d+', mut).group(0))
@@ -748,6 +748,9 @@ def map_activity_mutations(chembl_df: pd.DataFrame, assays_df_annotated: pd.Data
 
     # Keep columns of interest before joining dataframes
     assays_df_annotated = assays_df_annotated[['assay_id', 'accession', 'target_id', 'sequence']]
+
+    # drop sequence from chembl_df
+    chembl_df.drop('sequence', axis=1, inplace=True)
 
     # Keep activity pair if pchembl value is defined or if an activity label is defined
     chembl_df_activity = keep_chembl_defined_activity(chembl_df)
