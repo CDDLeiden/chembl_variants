@@ -247,9 +247,9 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
                 if str(row['assay_id']) in false_pos['assay_id'].keys():
                     if mut in false_pos['assay_id'][str(row['assay_id'])]:
                         flags_fixed[i] = False
-                # Revert False positives based on assay description matches
+                # Revert False positives based on assay description matches (case insensitive check)
                 description_match = [n for n, s in enumerate(false_pos['description'].keys()) if
-                                     s in row['description']]
+                                        (s.lower() in row['description'].lower()) and (mut in false_pos['description'][s])]
                 if bool(description_match):
                     if mut in list(false_pos['description'].values())[description_match[0]]:
                         flags_fixed[i] = False
