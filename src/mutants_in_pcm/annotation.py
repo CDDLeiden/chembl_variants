@@ -228,6 +228,7 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
 
     # Define exception (rescue) flags from file of known exceptions
     if known_exceptions is not None:
+        print('Reverting known exceptions...')
         with open(known_exceptions) as json_file:
             dict_known_exceptions = json.load(json_file)
             false_pos = dict_known_exceptions['false_positive']
@@ -252,6 +253,13 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
                 if bool(description_match):
                     if mut in list(false_pos['description'].values())[description_match[0]]:
                         flags_fixed[i] = False
+                # Revert False positives where the pattern "alpha\d+beta" is found in the description
+                ab_pattern = re.findall('alpha\d+beta', row['description'])
+                ba_pattern = re.findall('beta\d+alpha', row['description'])
+                bb_pattern = re.findall('beta\d+beta', row['description'])
+                all_patterns = ab_pattern + ba_pattern + bb_pattern
+                if any(mut.lower() in item.lower() for item in all_patterns): # case insensitive check
+                    flags_fixed[i] = False
 
                 # Revert False negatives based on accession
                 if row['accession'] in false_neg['accession'].keys():
@@ -273,6 +281,7 @@ def validate_aa_change(assays_df_extracted: pd.DataFrame,
         assays_df_validation2['seq_flags_fixed'] = assays_df_validation2.apply(redefine_seq_flags, axis=1)
 
     else:
+        print('No known exceptions file found. Continuing without correcting known exceptions.')
         assays_df_validation2['seq_flags_fixed'] = assays_df_validation2['seq_flags']
 
     # Force filtering out mutations of format 'M1X' in all assay/target pairs (M1X is a common false positive)
